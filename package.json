@@ -1,0 +1,86 @@
+{
+  "name": "ai-paper-pet",
+  "productName": "AI论文宠物",
+  "version": "0.1.0",
+  "description": "AI 论文宠物 - 常驻桌面的论文写作陪伴工具",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node electron/start.js",
+    "dev": "node electron/start.js",
+    "test:stream": "node electron/stream-parser.test.js",
+    "test:word": "node electron/word-export.test.js",
+    "test:research": "node electron/research-workflow.test.js",
+    "test:agent": "node electron/paper-writing-agent.test.js",
+    "test:citations": "node electron/citation-format.test.js",
+    "test:data-tools": "python scripts/data_analysis.test.py",
+    "test:session": "node electron/writing-session.test.js",
+    "test:parser": "node electron/document-parser.test.js",
+    "test:thesis": "node electron/thesis-controller.test.js",
+    "test:storage": "node electron/cache-storage.test.js",
+    "test:migration": "node electron/workspace-store.test.js",
+    "test:rag-cache": "node electron/rag-persistence.test.js",
+    "test:agent-runtime": "node electron/agent-runtime.test.js",
+    "test:skills": "node electron/skill-runtime.test.js",
+    "test:ocr": "node electron/ocr-runtime.test.js",
+    "test:orchestrator": "node electron/orchestrator.test.js",
+    "test:tool-cache": "node electron/tool-registry.test.js",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "build": {
+    "appId": "cn.openpaper.paperpet",
+    "productName": "AI论文宠物",
+    "asar": true,
+    "asarUnpack": [
+      "assets/ocr/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "assets/**/*",
+      "electron/**/*",
+      "src/**/*",
+      "package.json",
+      "THIRD_PARTY_NOTICES.md",
+      "!electron/*.test.js",
+      "!electron/rag-smoke.js",
+      "!assets/pets/**/*"
+    ],
+    "win": {
+      "icon": "assets/icons/app-icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AI论文宠物",
+      "installerIcon": "assets/icons/app-icon.ico",
+      "uninstallerIcon": "assets/icons/app-icon.ico",
+      "artifactName": "AI论文宠物-安装程序-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "allowScripts": {
+    "electron@35.7.5": true
+  },
+  "dependencies": {
+    "@xenova/transformers": "2.17.2",
+    "@napi-rs/canvas": "0.1.100",
+    "docx": "9.5.1",
+    "jszip": "3.10.1",
+    "pdfjs-dist": "5.4.530",
+    "tesseract.js": "7.0.0"
+  }
+}
