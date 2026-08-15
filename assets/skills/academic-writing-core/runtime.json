@@ -1,0 +1,7 @@
+{
+  "references": [
+    { "path": "../_shared/academic-writing/references/delivery-modes.md", "label": "分阶段交付模式", "maxCharacters": 5000 },
+    { "path": "../_shared/scholar-forge/integrity-protocol.md", "label": "引用与证据诚信协议", "maxCharacters": 4000 },
+    { "path": "../_shared/scholar-forge/writing-quality.md", "label": "学术表达质量审计", "maxCharacters": 4000 }
+  ]
+}

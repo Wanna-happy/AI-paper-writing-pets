@@ -1,0 +1,7 @@
+{
+  "references": [
+    { "path": "../_shared/academic-writing/chapters/ch03-genesis-question.md", "label": "缘起与问题", "maxCharacters": 7000 },
+    { "path": "../_shared/academic-writing/chapters/ch01-form-logic.md", "label": "论文形式逻辑", "maxCharacters": 5000 },
+    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Introduction（引言，Swales CARS 模型）", "label": "引言 CARS 写作剧本", "maxCharacters": 7000 }
+  ]
+}

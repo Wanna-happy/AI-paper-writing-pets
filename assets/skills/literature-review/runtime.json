@@ -1,0 +1,8 @@
+{
+  "references": [
+    { "path": "../_shared/academic-writing/chapters/ch04-lit-review.md", "label": "文献综述组织", "maxCharacters": 7000 },
+    { "path": "../_shared/academic-writing/chapters/ch05-lit-technique.md", "label": "文献选择与运用", "maxCharacters": 7000 },
+    { "path": "../_shared/academic-writing/references/argument-design.md", "label": "论证与研究缺口设计", "maxCharacters": 7000 },
+    { "path": "../_shared/scholar-forge/integrity-protocol.md", "label": "文献核验与证据诚信", "maxCharacters": 4000 }
+  ]
+}

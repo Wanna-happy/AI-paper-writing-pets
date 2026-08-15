@@ -1,0 +1,9 @@
+{
+  "references": [
+    { "path": "../_shared/academic-writing/references/statistics.md", "label": "统计分析与结果解释", "maxCharacters": 9000 },
+    { "path": "../_shared/academic-writing/chapters/ch07-organizing-materials.md", "label": "经验材料组织逻辑", "maxCharacters": 7000 },
+    { "path": "../_shared/scholar-forge/reporting-guidelines.md", "label": "统计与研究报告规范", "maxCharacters": 4000 },
+    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Results（结果）", "label": "结果章节写作剧本", "maxCharacters": 6000 },
+    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Discussion（讨论，倒漏斗，由窄到宽）", "label": "讨论章节写作剧本", "maxCharacters": 6000 }
+  ]
+}

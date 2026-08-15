@@ -1,0 +1,6 @@
+{
+  "references": [
+    { "path": "../_shared/academic-writing/references/statistics.md", "label": "统计方法选择与解释", "maxCharacters": 9000 },
+    { "path": "../_shared/scholar-forge/reporting-guidelines.md", "label": "统计报告最低要求", "maxCharacters": 4000 }
+  ]
+}

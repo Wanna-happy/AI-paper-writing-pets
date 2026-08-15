@@ -1,0 +1,9 @@
+{
+  "references": [
+    { "path": "../_shared/academic-writing/chapters/ch06-material-method.md", "label": "材料与方法叙事", "maxCharacters": 7000 },
+    { "path": "../_shared/academic-writing/references/research-paths.md", "label": "研究路径选择", "maxCharacters": 8000 },
+    { "path": "../_shared/academic-writing/references/qualitative-case.md", "label": "定性与案例研究", "maxCharacters": 7000 },
+    { "path": "../_shared/scholar-forge/reporting-guidelines.md", "label": "研究报告规范", "maxCharacters": 4000 },
+    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Methods（方法）", "label": "方法章节写作剧本", "maxCharacters": 6000 }
+  ]
+}
