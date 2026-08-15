@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+    <title>AI 论文宠物</title>
+    <link rel="stylesheet" href="./styles/feed.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="titlebar">
+        <div class="titlebar__brand"><span class="brand-mark">P</span><strong>AI 论文宠物</strong></div>
+        <div class="titlebar__project" id="titlebar-project">尚未创建项目</div>
+        <div class="window-actions">
+          <button class="title-action" id="pet-mode-button" type="button">隐藏工作台</button>
+          <button class="icon-button" id="close-button" type="button" aria-label="关闭到宠物模式">×</button>
+        </div>
+      </header>
+
+      <div class="app-grid">
+        <aside class="app-sidebar">
+          <div class="sidebar-top">
+            <button class="workspace-switcher" id="project-switcher" type="button">
+              <span class="workspace-icon">文</span>
+              <span><strong id="sidebar-project">论文宠物</strong><small>本地工作区</small></span>
+              <b>⌄</b>
+            </button>
+            <div class="project-menu" id="project-menu" hidden>
+              <div id="project-list"></div>
+              <button type="button" data-action="new-project">＋ 新建论文项目</button>
+            </div>
+
+            <nav class="primary-nav" aria-label="主导航">
+              <button class="nav-item is-active" id="sidebar-workbench-button" data-view="workbench" type="button"><span>□</span>新建对话</button>
+              <button class="nav-item" data-view="library" type="button"><span>▤</span>资料库<small id="sidebar-count">0</small></button>
+            </nav>
+          </div>
+
+          <section class="sidebar-projects">
+            <div class="sidebar-section-title"><span>当前项目对话</span><button id="sidebar-new-chat-button" type="button">＋</button></div>
+            <div class="sidebar-conversation-list" id="sidebar-conversation-list"></div>
+          </section>
+
+          <section class="sidebar-projects project-section">
+            <div class="sidebar-section-title"><span>论文项目</span><button data-action="new-project" type="button">＋</button></div>
+            <div class="sidebar-project-list" id="sidebar-project-list"></div>
+          </section>
+
+          <div class="sidebar-bottom">
+            <button class="pet-mini-card" id="pet-manage-button" data-view="pet" type="button">
+              <div class="pet-mini-avatar" id="pet-mini-avatar">🐕</div>
+              <div><strong id="pet-name-label">小柴</strong><span id="pet-stage-label">阶段 1 · 0 MB</span></div><b>›</b>
+            </button>
+            <button class="account-button" id="account-menu-button" type="button">
+              <span class="account-avatar">我</span><span><strong id="account-name-label">本地用户</strong><small>个人工作区</small></span><b>•••</b>
+            </button>
+            <div class="account-menu" id="account-menu" hidden>
+              <button data-view="settings" type="button"><span>⚙</span>设置 <kbd>Ctrl+,</kbd></button>
+            </div>
+            <p class="local-note"><span></span>资料默认仅保存在本机</p>
+          </div>
+        </aside>
+
+        <section class="content-area">
+          <section class="view chat-view is-active" data-view-panel="workbench">
+            <header class="content-header">
+              <div><span class="content-project-icon">▱</span><strong id="chat-project-title">尚未创建项目</strong><button id="project-edit-button" type="button">•••</button></div>
+              <div class="header-actions"><button id="new-chat-button" type="button">＋ 新对话</button><button id="assemble-thesis-button" type="button" hidden>组装全文</button><button id="open-library-button" type="button">项目资料</button></div>
+            </header>
+
+            <div class="chat-scroll" id="chat-scroll">
+              <div class="chat-empty" id="chat-empty">
+                <div class="empty-pet">柴</div>
+                <h1 id="welcome-title">和小柴一起开始论文写作</h1>
+                <p>投喂可信资料，提出写作任务。所有正式引用都应能追溯到项目来源。</p>
+                <div class="prompt-suggestions">
+                  <button type="button" data-prompt="根据项目资料，为我生成一份论文提纲">生成论文提纲<span>→</span></button>
+                  <button type="button" data-prompt="梳理项目资料中的主要研究观点和分歧">梳理文献观点<span>→</span></button>
+                  <button type="button" data-prompt="检查当前草稿中需要核验的事实与引用">检查事实引用<span>→</span></button>
+                </div>
+              </div>
+
+              <div class="conversation" id="conversation"></div>
+            </div>
+
+            <div class="composer-dock">
+              <section class="composer" aria-label="论文写作输入">
+                <textarea id="task-input" rows="1" aria-label="告诉小柴你的论文任务" placeholder="告诉小柴你想研究或写作的内容"></textarea>
+                <div class="composer-footer">
+                  <div class="composer-tools">
+                    <button id="attach-button" type="button" aria-label="添加本轮工作文件">＋</button>
+                  </div>
+                  <button class="send-button" id="send-button" type="button" disabled aria-label="发送任务">↑</button>
+                </div>
+              </section>
+              <div id="conversation-file-list" class="conversation-file-list" hidden></div>
+              <p class="composer-disclaimer">AI工具仅作学习帮手，生成内容可能有误，请核验事实与引用。</p>
+            </div>
+          </section>
+
+          <section class="view page-view" data-view-panel="library">
+            <header class="page-header"><div><p class="eyebrow">RAG 知识库</p><h1>项目资料</h1><p>资料在本地完成解析、分块与索引；写作时只调用检索命中的证据片段。</p></div><button class="primary-button" id="library-add-button" type="button">＋ 添加资料</button></header>
+            <section class="rag-status-card"><div class="rag-status-icon">R</div><div><strong id="rag-status-title">知识库尚未建立</strong><p id="rag-status-detail">导入可解析资料后自动建立本地索引。</p></div><button class="secondary-button" id="rag-rebuild-button" type="button">重建索引</button></section>
+            <div class="toolbar"><input id="library-filter" type="search" placeholder="搜索资料" /><span id="library-summary">0 份资料</span></div>
+            <button class="drop-zone" id="drop-zone" type="button"><span>⇧</span><div><strong>拖入论文资料</strong><small>PDF、TXT、Markdown、DOCX、CSV、XLSX、图片、BibTeX</small></div><b>选择文件</b></button>
+            <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
+            <div class="library-list" id="library-list"></div>
+            <ul id="recent-file-list" hidden></ul>
+          </section>
+
+          <section class="view page-view pet-management-view" data-view-panel="pet">
+            <header class="page-header"><div><p class="eyebrow">宠物管理</p><h1 id="pet-page-heading">陪小柴一起成长</h1><p>管理宠物身份、互动方式与成长进度。</p></div><button class="secondary-button" id="pet-page-back-button" type="button">返回论文项目</button></header>
+            <form id="pet-form" class="pet-management-grid">
+              <section class="pet-hero-card">
+                <div class="pet-large-preview" id="pet-large-preview" data-pet-preview="ember-pup"><span class="pet-preview-sprite" id="pet-preview-glyph"></span></div>
+                <div><p>当前伙伴</p><h2 id="pet-page-name">小柴</h2><span id="pet-page-stage">成长阶段 1 · 0 MB</span></div>
+              </section>
+              <section class="management-card pet-profile-form"><h2>宠物身份</h2><label>宠物昵称<input id="pet-name-input" type="text" maxlength="12" placeholder="小焰" /></label><label>宠物形象<select id="pet-select"><option value="ember-pup">Ember Pup（犬）</option><option value="shadow-kit">Shadow Kit（猫）</option><option value="nori">Nori（寿司精灵）</option></select></label><div class="pet-choice-grid" id="pet-choice-grid"><button type="button" data-pet-choice="ember-pup"><span class="pet-choice-sprite"></span><b>Ember Pup</b><small>OpenPets 原创</small></button><button type="button" data-pet-choice="shadow-kit"><span class="pet-choice-sprite"></span><b>Shadow Kit</b><small>OpenPets 原创</small></button><button type="button" data-pet-choice="nori"><span class="pet-choice-sprite"></span><b>Nori</b><small>OpenPets 原创</small></button></div></section>
+              <section class="management-card pet-growth-panel"><div class="growth-heading"><strong id="growth-stage">成长阶段 1</strong><span id="growth-percent">0%</span></div><div class="growth-track"><span id="growth-bar"></span></div><p id="growth-next">再投喂 10,000 MB 进入下一阶段</p><small>只有成功解析且未删除的唯一资料才计入成长。</small><div class="stage-track"><span class="is-active">阶段 1</span><span>阶段 2</span><span>阶段 3</span><span>阶段 4</span><span>阶段 5</span></div></section>
+              <section class="management-card pet-behavior-panel"><h2>互动与陪伴</h2><label class="setting-row"><span><strong>显示桌面宠物</strong><small>关闭后可从系统托盘再次显示</small></span><input id="pet-visible-enabled" type="checkbox" /></label><label class="setting-row"><span><strong>任务完成音效</strong><small>生成完成时叫两声</small></span><input id="pet-sound-enabled" type="checkbox" /></label><label class="setting-row"><span><strong>宠物语音回复</strong><small>朗读简短任务状态</small></span><input id="pet-voice-enabled" type="checkbox" /></label><label class="setting-row"><span><strong>免打扰模式</strong><small>关闭主动声音与空闲提醒</small></span><input id="pet-dnd-enabled" type="checkbox" /></label></section>
+              <footer class="pet-management-actions"><span id="pet-save-status"></span><button class="primary-button" type="submit">保存宠物设置</button></footer>
+            </form>
+          </section>
+
+          <section class="view settings-view" data-view-panel="settings">
+            <aside class="settings-sidebar">
+              <div class="settings-title"><button id="settings-back-button" type="button">←</button><strong>设置</strong></div>
+              <input class="settings-search" id="settings-search" type="search" placeholder="搜索设置…" />
+              <p>个人</p>
+              <nav>
+                <button class="is-active" data-settings-panel="account" type="button"><span>◎</span>账户管理</button>
+                <button data-settings-panel="appearance" type="button"><span>☼</span>主题外观</button>
+                <button data-settings-panel="api" type="button"><span>⌁</span>API 设置</button>
+                <button data-settings-panel="personalization" type="button"><span>◌</span>个性化</button>
+                <button data-settings-panel="shortcuts" type="button"><span>⌨</span>键盘快捷键</button>
+              </nav>
+            </aside>
+
+            <form class="settings-content" id="settings-form">
+              <section class="settings-panel is-active" data-settings-content="account">
+                <div class="settings-heading"><h1>账户管理</h1><p>当前为无需登录的本地单用户模式。</p></div>
+                <div class="settings-card profile-card"><div class="large-avatar">我</div><div><strong id="account-card-name">本地用户</strong><p>项目、资料和草稿均保存在这台设备。</p></div><span class="status-pill">本地账户</span></div>
+                <div class="settings-card form-card"><label>显示名称<input id="account-display-name" type="text" maxlength="30" placeholder="本地用户" /></label><div class="setting-row"><span><strong>本地数据目录</strong><small>资料和工作区数据由 Electron 安全管理</small></span><b>仅本机</b></div><div class="setting-row"><span><strong>换机迁移</strong><small>后续通过加密项目包手动导入导出</small></span><b>规划中</b></div></div>
+              </section>
+
+              <section class="settings-panel" data-settings-content="appearance">
+                <div class="settings-heading"><h1>主题外观</h1><p>选择工作台主题和界面强调色。</p></div>
+                <div class="settings-card form-card"><label>主题<select id="theme-select"><option value="system">跟随系统</option><option value="dark">深色</option><option value="light">浅色</option></select></label><label>强调色<select id="accent-select"><option value="orange">暖橙</option><option value="blue">学术蓝</option><option value="green">森林绿</option><option value="purple">灵感紫</option></select></label><label>界面密度<select id="density-select"><option value="comfortable">舒适</option><option value="compact">紧凑</option></select></label></div>
+              </section>
+
+              <section class="settings-panel" data-settings-content="api">
+                <div class="settings-heading"><h1>API 设置</h1><p>选择模型服务商并填写对应的 API Key。</p></div>
+                <div class="settings-card form-card"><label>服务商<select id="api-provider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option><option value="qwen">通义千问</option><option value="zhipu">智谱 GLM</option><option value="moonshot">Moonshot / Kimi</option><option value="openrouter">OpenRouter</option></select></label><div class="api-provider-card"><div class="api-provider-logo" id="api-provider-logo">D</div><div><strong id="api-provider-name">DeepSeek</strong><p id="api-provider-description">官方接口地址和默认模型由应用维护。</p></div><span id="api-connection-badge" class="status-pill">未连接</span></div><label><span id="api-key-label">DeepSeek API Key</span><span class="secret-field"><input id="api-key" type="password" autocomplete="off" placeholder="填写所选服务商的 API Key" /><button id="api-key-toggle" type="button" aria-label="显示 API 密钥" title="显示 API 密钥"><span class="eye-icon" aria-hidden="true"></span></button></span></label><p class="api-help">不同服务商的密钥分别使用系统安全存储加密保存，不会写入论文项目、导出文件或普通日志。</p><p id="api-status" class="setting-status"></p><div class="api-actions"><button id="api-test-button" class="secondary-button" type="button">测试当前密钥</button><button id="api-save-test-button" class="primary-button" type="button">保存并测试</button></div></div>
+              </section>
+
+              <section class="settings-panel" data-settings-content="personalization">
+                <div class="settings-heading"><h1>个性化</h1><p>设置默认论文语言、引用格式和助手风格。</p></div>
+                <div class="settings-card form-card"><label>默认语言<select id="default-language"><option>中文</option><option>英文</option><option>中英双语</option></select></label><label>默认引用格式<select id="default-citation"><option>GB/T 7714</option><option>APA</option><option>MLA</option><option>Chicago</option></select></label><label>写作风格<select id="writing-style"><option value="rigorous">严谨学术</option><option value="concise">简洁清晰</option><option value="explanatory">解释充分</option></select></label></div>
+              </section>
+
+              <section class="settings-panel" data-settings-content="shortcuts">
+                <div class="settings-heading"><h1>键盘快捷键</h1><p>提高论文工作台的操作效率。</p></div>
+                <div class="settings-card shortcut-list"><div><span>打开设置</span><kbd>Ctrl + ,</kbd></div><div><span>新建对话</span><kbd>Ctrl + N</kbd></div><div><span>发送任务</span><kbd>Ctrl + Enter</kbd></div><div><span>添加资料</span><kbd>Ctrl + O</kbd></div><div><span>返回宠物</span><kbd>Esc</kbd></div></div>
+              </section>
+
+              <footer class="settings-footer"><span id="settings-save-status"></span><button class="primary-button" type="submit">保存设置</button></footer>
+            </form>
+          </section>
+        </section>
+      </div>
+    </main>
+
+    <dialog id="project-dialog"><form method="dialog" class="modal-card" id="project-form"><div class="modal-heading"><div><p class="eyebrow">论文项目</p><h2 id="project-dialog-title">新建项目</h2></div><button value="cancel" type="submit">×</button></div><label>项目名称<input id="project-title" required maxlength="80" /></label><div class="form-grid"><label>论文类型<select id="project-type"><option>课程论文</option><option>开题报告</option><option selected>硕士学位论文</option><option>博士学位论文</option><option>期刊论文</option><option>研究报告</option></select></label><fieldset class="domain-picker" id="project-domains"><legend>学科领域（可多选）</legend><div class="domain-options"><label><input type="checkbox" name="project-domain" value="哲学" />哲学</label><label><input type="checkbox" name="project-domain" value="经济学" />经济学</label><label><input type="checkbox" name="project-domain" value="法学" />法学</label><label><input type="checkbox" name="project-domain" value="教育学" />教育学</label><label><input type="checkbox" name="project-domain" value="文学" />文学</label><label><input type="checkbox" name="project-domain" value="历史学" />历史学</label><label><input type="checkbox" name="project-domain" value="理学" />理学</label><label><input type="checkbox" name="project-domain" value="工学" />工学</label><label><input type="checkbox" name="project-domain" value="农学" />农学</label><label><input type="checkbox" name="project-domain" value="医学" />医学</label><label><input type="checkbox" name="project-domain" value="管理学" />管理学</label><label><input type="checkbox" name="project-domain" value="艺术学" />艺术学</label><label><input type="checkbox" name="project-domain" value="其他" />其他</label></div></fieldset><label>语言<select id="project-language"><option selected>中文</option><option>英文</option><option>中英双语</option></select></label><label>引用格式<select id="project-citation"><option selected>GB/T 7714</option><option>APA</option><option>MLA</option><option>Chicago</option></select></label></div><label>写作目标<textarea id="project-goal" placeholder="研究问题、方法、目标院校或期刊、预期成果等"></textarea></label><p class="project-field-help">学科领域用于选择科研工作流，可同时选择多个交叉方向；创建后仍可在项目设置中修改。</p><div class="modal-actions split-actions"><button class="danger-link" id="project-delete-button" value="cancel" type="button" hidden>删除项目</button><span></span><button value="cancel" type="submit">取消</button><button class="primary-button" value="default" type="submit">保存项目</button></div></form></dialog>
+    <dialog id="reminder-dialog"><form method="dialog" class="modal-card reminder-card"><div class="reminder-icon">学</div><h2>开始生成前，请先确认</h2><p>AI工具仅作学习帮手，请同学勤奋努力，掌握真知识。</p><small>生成结果仍需你核验事实、引用与格式。</small><div class="modal-actions"><button value="cancel" type="submit">返回检查</button><button class="primary-button" value="confirm" type="submit">我已知晓，开始生成</button></div></form></dialog>
+    <dialog id="confirm-dialog"><form method="dialog" class="modal-card compact-modal"><h2 id="confirm-title">确认操作</h2><p id="confirm-message"></p><div class="modal-actions"><button value="cancel" type="submit">取消</button><button class="danger-button" value="confirm" type="submit">确认删除</button></div></form></dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./feed.js"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: rgba(0,0,0,0) !important; user-select: none; }
+.pet-stage { position: relative; width: 100vw; height: 100vh; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 0; overflow: hidden; background: rgba(0,0,0,0); cursor: grab; }
+.pet-speech { display: none !important; }
+.openpet { position: relative; width: 154px; height: 166px; overflow: visible; transform-origin: 50% 95%; cursor: pointer; outline: none; -webkit-app-region: no-drag; }
+.openpet__sprite { position: absolute; z-index: 3; left: -19px; top: -19px; width: 192px; height: 208px; background-repeat: no-repeat; background-size: 1536px 1872px; background-position: 0 var(--sprite-row-y,0); image-rendering: auto; transform: scale(.8); transform-origin: top left; animation: openpet-frames var(--sprite-duration,5500ms) steps(var(--sprite-frames,6)) var(--sprite-iterations,infinite); filter: none; pointer-events: none; }
+.openpet__shadow { position: absolute; z-index: 1; left: 50%; bottom: 4px; width: 96px; height: 13px; border-radius: 50%; background: rgba(45,30,20,.2); filter: blur(5px); transform: translateX(-50%); }
+.openpet:hover .openpet__sprite { filter: saturate(1.06) brightness(1.03); }
+.openpet:focus-visible .openpet__sprite { filter: drop-shadow(0 0 9px rgba(255,190,96,.88)); }
+.pet-stage.is-dragging { cursor: grabbing; }
+.pet-stage.is-dragging .openpet__sprite { animation-play-state: paused; }
+@keyframes openpet-frames { from { background-position: 0 var(--sprite-row-y,0); } to { background-position: calc(-192px * var(--sprite-frames,6)) var(--sprite-row-y,0); } }
+@media (prefers-reduced-motion: reduce) { .openpet__sprite { animation: none; } }

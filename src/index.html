@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title></title>
+    <link rel="stylesheet" href="./styles/shiba.css" />
+  </head>
+  <body data-pet="ember-pup">
+    <div class="pet-stage" id="pet-stage" aria-label="桌面宠物">
+      <div class="pet-speech" id="pet-speech" role="status" aria-live="polite"></div>
+      <div class="openpet" id="desktop-pet" role="button" tabindex="0" aria-label="单击互动，双击打开论文工作台">
+        <div class="openpet__shadow" aria-hidden="true"></div>
+        <div class="openpet__sprite" id="openpet-sprite" role="img" aria-label="OpenPets 动画桌面宠物"></div>
+      </div>
+    </div>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
