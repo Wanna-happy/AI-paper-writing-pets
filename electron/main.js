@@ -11,6 +11,7 @@ const {
 } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const { loadSettings, saveSettings } = require('./settings');
 const workspaceStore = require('./workspace-store');
 const ragStore = require('./rag-store');
@@ -40,6 +41,35 @@ function formatProjectDomains(project) {
 
 const APP_ICON = path.join(__dirname, '../assets/icons/app-icon.ico');
 const TRAY_ICON = path.join(__dirname, '../assets/icons/tray-icon.png');
+
+function handleSquirrelEvent() {
+  const event = process.argv[1];
+  const supportedEvents = new Set([
+    '--squirrel-install',
+    '--squirrel-updated',
+    '--squirrel-uninstall',
+    '--squirrel-obsolete',
+  ]);
+  if (!supportedEvents.has(event)) return false;
+
+  if (event !== '--squirrel-obsolete') {
+    const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
+    const shortcutAction = event === '--squirrel-uninstall' ? '--removeShortcut' : '--createShortcut';
+    try {
+      spawn(updateExe, [shortcutAction, path.basename(process.execPath)], {
+        detached: true,
+        stdio: 'ignore',
+      }).unref();
+    } catch {
+      // Squirrel will still complete installation if shortcut creation is unavailable.
+    }
+  }
+
+  setTimeout(() => app.quit(), 1000);
+  return true;
+}
+
+const squirrelEventHandled = handleSquirrelEvent();
 
 const PET_WINDOW = {
   width: 180,
@@ -761,6 +791,7 @@ ipcMain.handle('draft-export-word', async (_event, projectId, draft) => {
 });
 
 app.whenReady().then(() => {
+  if (squirrelEventHandled) return;
   app.setAppUserModelId('cn.openpaper.paperpet');
   createMainWindow();
   createTray();
