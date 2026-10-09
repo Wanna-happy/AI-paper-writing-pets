@@ -44,6 +44,19 @@ Module._load = function load(request, parent, isMain) {
 async function run() {
 try {
   const store = require('./workspace-store');
+  store.setApiKey('session-a', 'session', 'agent-a');
+  store.setApiKey('session-b', 'session', 'agent-b');
+  assert.equal(store.getApiKey('session', 'agent-a'), 'session-a');
+  assert.equal(store.getApiKey('session', 'agent-b'), 'session-b');
+  store.setApiKey('stored-a', 'encrypted', 'agent-a');
+  store.setApiKey('stored-b', 'encrypted', 'agent-b');
+  store.setApiKey('', 'encrypted', 'agent-a');
+  assert.equal(store.getApiKey('encrypted', 'agent-a'), '');
+  assert.equal(store.getApiKey('encrypted', 'agent-b'), 'stored-b');
+  fs.writeFileSync(path.join(userData, 'api-key.bin'), 'legacy-test-key');
+  assert.equal(store.getApiKey('encrypted', 'deepseek'), 'legacy-test-key');
+  store.setApiKey('', 'encrypted', 'deepseek');
+  assert.equal(store.getApiKey('encrypted', 'deepseek'), '', 'Deleting a key must also remove legacy fallback');
   const migrated = store.loadWorkspace();
   assert.strictEqual(migrated.projects[0].title, '旧项目迁移');
   assert.strictEqual(migrated.projects[0].documents[0].text, legacy.projects[0].documents[0].text);
@@ -65,6 +78,29 @@ try {
   store.saveDraft(created.id, { task: '对话内任务', content: '<p>内容</p>', mode: 'api' });
   const withDraft = store.loadWorkspace().projects.find((project) => project.id === created.id);
   assert.strictEqual(withDraft.drafts[0].conversationId, createdProject.activeConversationId);
+  const reviewDraft = store.saveDraft(created.id, { content: '<p>正文过长</p>', mode: 'api', lengthReview: { contract: { minimum: 2, maximum: 3, label: '2—3汉字' } } });
+  assert.equal(reviewDraft.lengthReview.passed, false);
+  assert.equal(reviewDraft.lengthReview.actual, 4);
+  assert.equal(reviewDraft.deliveryStatus, 'needs-revision');
+  const edited = store.saveDraft(created.id, { ...reviewDraft, content: '<p>正文</p>' });
+  assert.equal(edited.lengthReview.passed, true);
+  assert.equal(edited.deliveryStatus, 'ready');
+  assert(!edited.checks.some(item => item.startsWith('篇幅未达标')));
+  const empiricalPlans = { [createdProject.activeConversationId]: { id: 'synthetic-plan', revision: 2, status: 'results-review', results: [{ sampleSize: 128 }], history: [{ revision: 1 }] } };
+  store.updateProject(created.id, { empiricalPlans });
+  const uploaded = path.join(userData, 'upload.csv');
+  fs.writeFileSync(uploaded, 'x,y\n1,2\n2,4');
+  const projectFiles = require('./project-files');
+  await projectFiles.importProjectFiles({ store, ragStore: { indexProject: async () => {} }, projectId: created.id, paths: [uploaded] });
+  fs.unlinkSync(uploaded);
+  await store.closeWorkspace();
+  const restarted = store.loadWorkspace().projects.find(project => project.id === created.id);
+  assert.deepEqual(restarted.empiricalPlans, empiricalPlans, '重启后方案版本与实际结果必须保留');
+  const available = projectFiles.availableProjectFiles(store, restarted);
+  assert.equal(available.length, 1, '关闭数据库并删除原文件后，项目数据仍必须可用');
+  assert.equal(fs.readFileSync(require('./conversation-files').resolveConversationAttachment(available[0]), 'utf8'), 'x,y\n1,2\n2,4');
+  store.removeDocument(created.id, available[0].documentId);
+  assert.equal(projectFiles.availableProjectFiles(store, store.loadWorkspace().projects.find(project => project.id === created.id)).length, 0, '删除项目文件后不得从历史任务恢复它');
   await store.closeWorkspace();
   console.log('workspace sqlite migration test passed');
 } finally {

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="Microsoft YaHei, Arial, sans-serif">
+  <rect width="960" height="600" fill="#f7f8fa"/>
+  <rect x="0" y="0" width="960" height="48" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="20" y="31" font-size="17" font-weight="bold" fill="#18344d">AI 论文宠物 · 任意环节进/出</text>
+
+  <!-- 左：A 局部操作 -->
+  <rect x="16" y="64" width="460" height="520" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="32" y="92" font-size="14" font-weight="bold" fill="#18344d">A · 局部操作（对已有稿子）</text>
+  <rect x="32" y="108" width="428" height="150" rx="6" fill="#fbfcfd" stroke="#d7dde5"/>
+  <text x="48" y="134" font-size="12" fill="#444">2.1 测量方法的研究脉络。既有研究围绕变量</text>
+  <text x="48" y="154" font-size="12" fill="#444">测量形成两类路径。一类侧重主观量表①……</text>
+  <rect x="48" y="168" width="396" height="60" rx="6" fill="#fff3e0" stroke="#e0a96d" stroke-dasharray="5 3"/>
+  <text x="64" y="190" font-size="12" fill="#9a6b2f">▎选中段落：本段论证偏口语化，建议学术化改写</text>
+  <text x="64" y="212" font-size="11" fill="#9a6b2f">（高亮区 = 待处理内容）</text>
+  <!-- 浮动菜单 -->
+  <rect x="320" y="232" width="140" height="108" rx="8" fill="#ffffff" stroke="#3f6f99" filter="drop-shadow(0 2 4 #0001)"/>
+  <text x="334" y="256" font-size="12" font-weight="bold" fill="#18344d">应用 Skill</text>
+  <rect x="332" y="268" width="116" height="22" rx="4" fill="#eef5fb"/>
+  <text x="342" y="284" font-size="11" fill="#3f6f99">润色这段</text>
+  <rect x="332" y="294" width="116" height="22" rx="4" fill="#eef5fb"/>
+  <text x="342" y="310" font-size="11" fill="#3f6f99">扩写这段</text>
+  <rect x="332" y="320" width="116" height="22" rx="4" fill="#eef5fb"/>
+  <text x="342" y="336" font-size="11" fill="#3f6f99">改实证风格</text>
+  <text x="32" y="420" font-size="11" fill="#8a93a0">仅改选中部分，其余段落不变；保留引用映射</text>
+
+  <!-- 右：B 会话中断恢复 -->
+  <rect x="492" y="64" width="452" height="520" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="508" y="92" font-size="14" font-weight="bold" fill="#18344d">B · 会话中断恢复（任务流）</text>
+  <rect x="508" y="108" width="420" height="40" rx="6" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="524" y="134" font-size="12" fill="#333">我：写第二章文献综述…（写到一半）</text>
+  <rect x="508" y="156" width="420" height="48" rx="6" fill="#fff3e0" stroke="#e0a96d"/>
+  <text x="524" y="180" font-size="12" fill="#9a6b2f">⏸ 已挂起：用户插话"先停，我去传新文献"</text>
+  <text x="524" y="200" font-size="11" fill="#9a6b2f">当前进度已存档</text>
+  <rect x="508" y="216" width="420" height="40" rx="6" fill="#eef5fb" stroke="#3f6f99"/>
+  <text x="524" y="242" font-size="12" fill="#333">＋ 上传 文献D.pdf → 已解析入库</text>
+  <rect x="508" y="264" width="420" height="40" rx="6" fill="#e8f5e9" stroke="#2e7d32"/>
+  <text x="524" y="290" font-size="12" fill="#2e7d32">▶ 恢复续写：新文献 D 已进入召回范围</text>
+  <rect x="508" y="320" width="420" height="40" rx="6" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="524" y="346" font-size="12" fill="#333">宠物：已包含文献D 续写第二章…</text>
+  <text x="508" y="400" font-size="11" fill="#8a93a0">断点不重来；新输入可被后续召回</text>
+  <text x="508" y="430" font-size="11" fill="#8a93a0">任务状态：挂起 / 恢复 / 完成 可观察</text>
+
+  <text x="20" y="588" font-size="10" fill="#aab2bd">线框图（占位）：以线上安装包真实界面为准，后续替换截图</text>
+</svg>

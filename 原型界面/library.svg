@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="Microsoft YaHei, Arial, sans-serif">
+  <rect width="960" height="600" fill="#f7f8fa"/>
+  <rect x="0" y="0" width="960" height="48" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="20" y="31" font-size="17" font-weight="bold" fill="#18344d">AI 论文宠物 · 资料库</text>
+
+  <!-- 上传区 -->
+  <rect x="24" y="72" width="912" height="90" rx="10" fill="#ffffff" stroke="#d7dde5" stroke-dasharray="6 4"/>
+  <text x="44" y="110" font-size="14" fill="#555">拖入或点击上传：PDF / Word / 数据文件（CSV·XLSX）</text>
+  <text x="44" y="138" font-size="12" fill="#8a93a0">解析后切分为知识块，作为写作唯一证据源；不联网、不查外部真伪</text>
+  <rect x="820" y="96" width="96" height="34" rx="6" fill="#4e79a7"/>
+  <text x="838" y="118" font-size="13" fill="#ffffff">解析全部</text>
+
+  <!-- 文件列表 -->
+  <text x="24" y="200" font-size="14" font-weight="bold" fill="#18344d">已入库资料（3）</text>
+  <rect x="24" y="214" width="912" height="44" rx="6" fill="#ffffff" stroke="#d7dde5"/>
+  <text x="44" y="242" font-size="13" fill="#333">📄 文献A.pdf</text>
+  <text x="360" y="242" font-size="12" fill="#2e7d32">✓ 已解析 · 120 分块</text>
+  <text x="560" y="242" font-size="12" fill="#8a93a0">可检索 · 可溯源</text>
+
+  <rect x="24" y="266" width="912" height="44" rx="6" fill="#ffffff" stroke="#d7dde5"/>
+  <text x="44" y="294" font-size="13" fill="#333">📄 文献B.pdf</text>
+  <text x="360" y="294" font-size="12" fill="#2e7d32">✓ 已解析 · 98 分块</text>
+  <text x="560" y="294" font-size="12" fill="#8a93a0">可检索 · 可溯源</text>
+
+  <rect x="24" y="318" width="912" height="44" rx="6" fill="#ffffff" stroke="#d7dde5"/>
+  <text x="44" y="346" font-size="13" fill="#333">📊 survey.csv</text>
+  <text x="360" y="346" font-size="12" fill="#2e7d32">✓ 已解析 · 数据列 12</text>
+  <text x="560" y="346" font-size="12" fill="#8a93a0">供数据分析使用</text>
+
+  <!-- 检索入口 -->
+  <text x="24" y="410" font-size="14" font-weight="bold" fill="#18344d">检索（写作时自动调用）</text>
+  <rect x="24" y="424" width="912" height="40" rx="6" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="44" y="450" font-size="12" fill="#555">输入主题 → 按语义 + 关键词召回相关分块，返回带文献名与页码的证据</text>
+
+  <rect x="24" y="500" width="912" height="60" rx="8" fill="#fbf4e8" stroke="#e0a96d"/>
+  <text x="44" y="524" font-size="12" fill="#9a6b2f">下个版本：聚类建主题地图（类 CiteSpace，按观点/方法分簇）</text>
+  <text x="44" y="546" font-size="11" fill="#9a6b2f">本期文献综述写作使用现有 RAG 召回（语义+关键词），不依赖聚类</text>
+
+  <text x="24" y="588" font-size="10" fill="#aab2bd">线框图（占位）：以线上安装包真实界面为准，后续替换截图</text>
+</svg>

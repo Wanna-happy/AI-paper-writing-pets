@@ -1,0 +1,45 @@
+const assert = require('assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const Module = require('module');
+const crypto = require('crypto');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'project-files-'));
+const original = Module._load;
+Module._load = function(id, ...args) { return id === 'electron' ? { app: { getPath: () => root } } : original.call(this, id, ...args); };
+(async () => {
+  const api = require('./project-files');
+  const projects = [{ id: crypto.randomUUID(), documents: [] }, { id: crypto.randomUUID(), documents: [] }];
+  const store = { loadWorkspace: () => ({ projects }), updateProject: (id, partial) => Object.assign(projects.find(p => p.id === id), partial),
+    importDocuments: async (id, paths) => {
+      const p = projects.find(p => p.id === id);
+      const imported = paths.map(file => ({ id: crypto.randomUUID(), name: path.basename(file), status: 'parsed', text: fs.readFileSync(file, 'utf8') }));
+      p.documents.push(...imported); return { imported, rejected: [], state: { projects } };
+    }, listAgentRuns: () => [] };
+  const indexed = [];
+  const ragStore = { indexProject: async project => indexed.push(project.id) };
+  const folder = path.join(root, 'upload');
+  fs.mkdirSync(path.join(folder, 'nested'), { recursive: true });
+  fs.writeFileSync(path.join(folder, 'nested', 'data.csv'), 'x,y\n1,2');
+  fs.writeFileSync(path.join(folder, 'paper.txt'), '真实文献');
+  fs.writeFileSync(path.join(folder, 'unknown.exe'), 'skip');
+  const result = await api.importProjectFiles({ store, ragStore, projectId: projects[0].id, paths: [folder] });
+  assert.equal(result.attachments.length, 2);
+  assert.equal(result.rejected.length, 1);
+  assert.equal(projects[0].documents.filter(doc => doc.status === 'parsed').length, 1);
+  assert.equal(projects[0].documents.filter(doc => doc.status === 'data').length, 1);
+  assert(result.attachments.some(file => file.relativePath === path.join('nested', 'data.csv')));
+  assert.deepEqual(indexed, [projects[0].id]);
+  const repeated = await api.importProjectFiles({ store, ragStore, projectId: projects[0].id, paths: [folder] });
+  assert.equal(projects[0].projectFiles.length, 2);
+  assert.equal(repeated.attachments.length, 2);
+  fs.rmSync(folder, { recursive: true });
+  delete require.cache[require.resolve('./conversation-files')];
+  assert.equal(api.availableProjectFiles(store, projects[0]).length, 2);
+  assert.equal(api.availableProjectFiles(store, projects[1]).length, 0);
+  const otherFolder = path.join(root, 'other.csv'); fs.writeFileSync(otherFolder, 'x,y\n1,2');
+  const second = await api.importProjectFiles({ store, ragStore, projectId: projects[1].id, paths: [otherFolder] });
+  assert.equal(second.attachments.length, 1);
+  assert.notEqual(second.attachments[0].id, result.attachments.find(file => file.extension === '.csv').id);
+  console.log('recursive folder import, persistent files, data/RAG separation, deduplication and project isolation passed');
+})().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { Module._load = original; fs.rmSync(root, { recursive: true, force: true }); });

@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+const { resolveAgentKey, resolveAgentConfig, keySlot, validateApiUrl } = require('./agent-api-config');
+const { createAgentApiService } = require('./agent-api-service');
+const values = new Map([['deepseek', 'shared-test']]);
+const store = { getApiKey: (_mode, slot) => values.get(slot) || '', setApiKey: (key, _mode, slot) => key ? values.set(slot, key) : values.delete(slot) };
+let settings = { api: { provider: 'deepseek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat', agents: {} } };
+let sent = null;
+const service = createAgentApiService({ store, loadSettings: () => settings, saveSettings: partial => { settings = { ...settings, ...partial }; },
+  providerRegistry: { complete: async (provider, key, messages, options) => { sent = { provider, key, options }; } } });
+(async () => {
+  assert.equal(resolveAgentKey(store, settings, 'writing'), 'shared-test');
+  service.save('chat', { enabled: true, provider: 'openai', model: 'chat-model', baseUrl: 'https://api.openai.com/v1', apiKey: 'must-not-persist' }, 'chat-test');
+  assert.equal(resolveAgentKey(store, settings, 'chat'), 'chat-test');
+  assert.equal(resolveAgentKey(store, settings, 'writing'), 'shared-test');
+  assert(!JSON.stringify(settings).includes('chat-test'));
+  assert(!JSON.stringify(settings).includes('must-not-persist'));
+  await service.test('chat', settings.api.agents.chat);
+  assert.equal(sent.key, 'chat-test');
+  assert.equal(sent.provider, 'openai');
+  assert.equal(sent.options.model, 'chat-model');
+  assert.equal(sent.options.endpoint, 'https://api.openai.com/v1/chat/completions');
+  await assert.rejects(service.test('chat', { ...settings.api.agents.chat, baseUrl: 'https://other.example/v1' }), /不同服务商或接口地址/);
+  service.save('analysis', { enabled: true, provider: 'deepseek', baseUrl: 'https://api.deepseek.com', model: 'analysis-model' }, 'analysis-test');
+  assert.equal(resolveAgentKey(store, settings, 'analysis'), 'analysis-test');
+  service.save('chat', settings.api.agents.chat, '', true);
+  assert.equal(resolveAgentKey(store, settings, 'chat'), '');
+  assert.equal(resolveAgentKey(store, settings, 'analysis'), 'analysis-test');
+  service.save('chat', { enabled: false });
+  assert.equal(resolveAgentKey(store, settings, 'chat'), 'shared-test');
+  assert.equal(resolveAgentConfig(settings, 'chat').provider, 'deepseek');
+  assert.throws(() => service.save('unknown', {}), /未知/);
+  for (const url of ['http://remote.example/v1', 'https://user:pass@example.com', 'https://example.com?key=secret', 'file:///tmp']) assert.throws(() => validateApiUrl(url));
+  assert.equal(validateApiUrl('http://127.0.0.1:8000/v1'), 'http://127.0.0.1:8000/v1');
+  assert.notEqual(keySlot({ provider: 'deepseek', baseUrl: 'https://a.example' }, 'writing'), keySlot({ provider: 'deepseek', baseUrl: 'https://b.example' }, 'writing'));
+  console.log('Per-Agent key isolation, endpoint-bound credentials, inheritance, deletion and transport validation passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });

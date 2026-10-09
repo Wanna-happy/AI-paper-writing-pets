@@ -134,7 +134,8 @@ def main():
         config = json.load(handle)
     os.makedirs(arguments.output_dir, exist_ok=True)
     result = write_mechanism_diagram(config, arguments.output_dir) if config.get("tool") == "mechanism_diagram" else analyze_data(config, arguments.output_dir)
-    print(json.dumps(result, ensure_ascii=False))
+    # Windows pipes may use a legacy code page; ASCII JSON preserves Unicode paths.
+    print(json.dumps(result, ensure_ascii=True))
 
 
 if __name__ == "__main__":

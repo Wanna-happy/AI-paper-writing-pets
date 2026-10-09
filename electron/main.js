@@ -11,7 +11,6 @@ const {
 } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
 const { loadSettings, saveSettings } = require('./settings');
 const workspaceStore = require('./workspace-store');
 const ragStore = require('./rag-store');
@@ -20,15 +19,19 @@ const {
   buildConversationFileContext,
   prepareConversationFiles,
   resolveConversationAttachment,
-  resolveConversationImage,
 } = require('./conversation-files');
-const { buildAcademicTable, normalizeCitationMarkers } = require('./citation-format');
+const { postProcessAgentContent } = require('./paper-output');
 const { AgentOrchestrator } = require('./agent/orchestrator');
-const { ProviderRegistry, DEFAULT_PROVIDERS } = require('./providers/provider-registry');
+const { ProviderRegistry, DEFAULT_PROVIDERS, resolveEndpoint } = require('./providers/provider-registry');
 const { ToolRegistry, findPythonExecutable, runProcess } = require('./tools/tool-registry');
 const { SkillRuntime } = require('./skills/skill-runtime');
+const { applyLocalEdit } = require('./agent/local-edit');
 const { createProjectBootstrapPrompt } = require('./paper-writing-agent');
 const { summarizeRuns } = require('./quality/evaluator');
+const { resolveAgentConfig, resolveAgentKey, normalizeAgents, validateApiUrl } = require('./agent-api-config');
+const { createAgentApiService } = require('./agent-api-service');
+const { assertTrustedSender, secureWindow } = require('./app-security');
+const { getSandboxStatus } = require('./sandbox/windows-sandbox');
 const {
   buildAssembledThesis,
   isLongThesis,
@@ -41,35 +44,6 @@ function formatProjectDomains(project) {
 
 const APP_ICON = path.join(__dirname, '../assets/icons/app-icon.ico');
 const TRAY_ICON = path.join(__dirname, '../assets/icons/tray-icon.png');
-
-function handleSquirrelEvent() {
-  const event = process.argv[1];
-  const supportedEvents = new Set([
-    '--squirrel-install',
-    '--squirrel-updated',
-    '--squirrel-uninstall',
-    '--squirrel-obsolete',
-  ]);
-  if (!supportedEvents.has(event)) return false;
-
-  if (event !== '--squirrel-obsolete') {
-    const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
-    const shortcutAction = event === '--squirrel-uninstall' ? '--removeShortcut' : '--createShortcut';
-    try {
-      spawn(updateExe, [shortcutAction, path.basename(process.execPath)], {
-        detached: true,
-        stdio: 'ignore',
-      }).unref();
-    } catch {
-      // Squirrel will still complete installation if shortcut creation is unavailable.
-    }
-  }
-
-  setTimeout(() => app.quit(), 1000);
-  return true;
-}
-
-const squirrelEventHandled = handleSquirrelEvent();
 
 const PET_WINDOW = {
   width: 180,
@@ -88,94 +62,6 @@ const PET_OPTIONS = [
   { id: 'nori', label: 'Nori · OpenPets 原创' },
 ];
 
-const IMAGE_MIME_TYPES = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-};
-const MAX_EMBEDDED_IMAGE_SIZE = 12 * 1024 * 1024;
-
-function asEmbeddedImage(filePath) {
-  const extension = path.extname(filePath || '').toLowerCase();
-  const mimeType = IMAGE_MIME_TYPES[extension];
-  if (!mimeType || !fs.existsSync(filePath)) return null;
-  if (fs.statSync(filePath).size > MAX_EMBEDDED_IMAGE_SIZE) return null;
-  return `data:${mimeType};base64,${fs.readFileSync(filePath).toString('base64')}`;
-}
-
-function paperImageSources(attachments = [], toolResult = null) {
-  const attachmentImages = new Map(attachments.map((attachment) => [attachment.id, attachment.previewDataUrl || resolveConversationImage(attachment)]));
-  const generatedImages = new Set((toolResult?.files || [])
-    .filter((filePath) => IMAGE_MIME_TYPES[path.extname(filePath || '').toLowerCase()])
-    .map((filePath) => path.resolve(filePath).toLowerCase()));
-  return { attachmentImages, generatedImages };
-}
-
-function materializePaperImages(content, attachments = [], toolResult = null) {
-  const { attachmentImages, generatedImages } = paperImageSources(attachments, toolResult);
-  return String(content || '').replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (match, prefix, quote, source) => {
-    let filePath = null;
-    if (source.startsWith('attachment://')) filePath = attachmentImages.get(source.slice('attachment://'.length));
-    else {
-      try {
-        const candidate = source.startsWith('file:') ? new URL(source).pathname : source;
-        const resolved = path.resolve(decodeURIComponent(candidate));
-        if (generatedImages.has(resolved.toLowerCase())) filePath = resolved;
-      } catch {
-        filePath = null;
-      }
-    }
-    const embedded = typeof filePath === 'string' && filePath.startsWith('data:image/')
-      ? filePath
-      : filePath ? asEmbeddedImage(filePath) : null;
-    return embedded ? `${prefix}${quote}${embedded}${quote}` : match;
-  });
-}
-
-function removeUnavailablePaperImages(content, attachments = [], toolResult = null) {
-  const { attachmentImages, generatedImages } = paperImageSources(attachments, toolResult);
-  return String(content || '').replace(/<figure\b[^>]*>[\s\S]*?<img\b[^>]*\bsrc\s*=\s*(["'])([^"']+)\1[^>]*>[\s\S]*?<\/figure>/gi, (figure, _quote, source) => {
-    const isAttachment = source.startsWith('attachment://') && attachmentImages.has(source.slice('attachment://'.length));
-    let isGenerated = false;
-    try { isGenerated = generatedImages.has(path.resolve(decodeURIComponent(source)).toLowerCase()); } catch { isGenerated = false; }
-    return isAttachment || isGenerated || source.startsWith('data:image/') ? figure : '';
-  });
-}
-
-function ensureToolImagesInPaper(content, toolResult = null) {
-  const imageFiles = (toolResult?.files || []).filter((filePath) => IMAGE_MIME_TYPES[path.extname(filePath || '').toLowerCase()]);
-  if (!imageFiles.length) return content;
-  const used = new Set([...String(content || '').matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)/gi)].map((match) => {
-    try { return path.resolve(decodeURIComponent(match[1])).toLowerCase(); } catch { return ''; }
-  }));
-  const figures = imageFiles.filter((filePath) => !used.has(path.resolve(filePath).toLowerCase())).map((filePath, index) => {
-    const name = path.basename(filePath, path.extname(filePath));
-    return `<figure><img src="${filePath}" alt="${name}"><figcaption>图 ${index + 1} ${name}</figcaption></figure>`;
-  }).join('\n');
-  return figures ? `${content}\n${figures}` : content;
-}
-
-function ensureAttachmentImagesInPaper(content, attachments = []) {
-  const imageAttachments = attachments.filter((attachment) => attachment.previewDataUrl || resolveConversationImage(attachment));
-  if (!imageAttachments.length) return content;
-  const used = new Set([...String(content || '').matchAll(/attachment:\/\/([^"'\s>]+)/gi)].map((match) => match[1]));
-  const figures = imageAttachments
-    .filter((attachment) => !used.has(attachment.id))
-    .map((attachment, index) => `<figure><img src="${attachment.previewDataUrl || `attachment://${attachment.id}`}" alt="${attachment.name}"><figcaption>图 ${index + 1} ${attachment.name}</figcaption></figure>`)
-    .join('\n');
-  if (!figures) return content;
-  const firstFigureReference = /(<p\b[^>]*>[^<]*图\s*\d+[\s\S]*?<\/p>)/i;
-  return firstFigureReference.test(content)
-    ? content.replace(firstFigureReference, `$1\n${figures}`)
-    : `${content}\n${figures}`;
-}
-
-function hasRealPaperImage(attachments = [], toolResult = null) {
-  return attachments.some((attachment) => resolveConversationImage(attachment))
-    || (toolResult?.files || []).some((filePath) => IMAGE_MIME_TYPES[path.extname(filePath || '').toLowerCase()]);
-}
-
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 /** @type {BrowserWindow | null} */
@@ -187,11 +73,58 @@ const activeGenerationControllers = new Map();
 let reminderShownThisLaunch = false;
 let pendingPetReaction = null;
 
+function handleApp(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedSender(event, [mainWindow, workspaceWindow], path.join(__dirname, '..'));
+    return handler(event, ...args);
+  });
+}
+function onApp(channel, handler) {
+  ipcMain.on(channel, (event, ...args) => {
+    try { assertTrustedSender(event, [mainWindow, workspaceWindow], path.join(__dirname, '..')); }
+    catch { return; }
+    handler(event, ...args);
+  });
+}
+
 const AI_PROVIDERS = DEFAULT_PROVIDERS;
 const providerRegistry = new ProviderRegistry(AI_PROVIDERS);
 
 function getProvider(providerId) {
   return AI_PROVIDERS[providerId] ?? AI_PROVIDERS.deepseek;
+}
+
+/** 共用配置的默认模型；各 Agent 可通过独立配置覆盖。 */
+const API_SCENARIOS = ['writing', 'planning', 'analysis'];
+
+function normalizeScenarios(raw) {
+  const scenarios = { ...(AI_PROVIDERS.deepseek.scenarios || {}) };
+  for (const key of API_SCENARIOS) {
+    const value = String(raw?.[key] || '').trim();
+    if (value) scenarios[key] = value;
+  }
+  return scenarios;
+}
+
+function normalizeBaseUrl(raw) {
+  const value = String(raw || '').trim().replace(/\/+$/, '');
+  if (value) return validateApiUrl(value);
+  return AI_PROVIDERS.deepseek.endpoint.replace(/\/chat\/completions$/, '');
+}
+
+/** 按场景解析出一次模型请求需要的完整配置（endpoint + model）。 */
+function resolveApiRequestConfig(settings, scenario) {
+  const config = resolveAgentConfig(settings, scenario);
+  return { providerId: config.provider, endpoint: resolveEndpoint(config.baseUrl, getProvider(config.provider).endpoint), model: config.model };
+}
+
+/** 统一模型请求入口：按场景解析 endpoint/model 并注入系统安全存储中的 API Key。供工具与编排器复用。 */
+async function requestModel({ scenario, messages, options = {} }) {
+  const settings = loadSettings();
+  const cfg = resolveApiRequestConfig(settings, scenario);
+  const apiKey = resolveAgentKey(workspaceStore, settings, scenario || 'writing');
+  if (!apiKey) throw new Error('未配置 API Key，请先在“设置 → AI 配置”填写后重试。');
+  return providerRegistry.complete(cfg.providerId, apiKey, messages, { ...options, endpoint: cfg.endpoint, model: cfg.model });
 }
 
 const PROJECT_TYPES = new Set(['课程论文', '开题报告', '硕士学位论文', '博士学位论文', '期刊论文', '研究报告']);
@@ -243,11 +176,12 @@ async function bootstrapProjectFromTask(task) {
   const apiKey = workspaceStore.getApiKey(settings.api.keyMode, settings.api.provider);
   let bootstrap = null;
   if (apiKey) {
+    const requestConfig = resolveApiRequestConfig(settings, 'planning');
     try {
-      const response = await providerRegistry.complete(settings.api.provider, apiKey, [
+      const response = await providerRegistry.complete(requestConfig.providerId, apiKey, [
         { role: 'system', content: createProjectBootstrapPrompt() },
         { role: 'user', content: String(task || '').trim() },
-      ], { temperature: 0, maxTokens: 220 });
+      ], { temperature: 0, maxTokens: 220, endpoint: requestConfig.endpoint, model: requestConfig.model });
       bootstrap = extractJsonObject(response.content);
     } catch {
       bootstrap = null;
@@ -257,24 +191,14 @@ async function bootstrapProjectFromTask(task) {
   return { project, workspace: workspaceStore.loadWorkspace() };
 }
 
-function postProcessAgentContent(rawContent, attachments, toolResult, retrievalHits) {
-  const citationEvidence = retrievalHits.map((hit, index) => ({ index: index + 1, documentName: hit.documentName, page: hit.page }));
-  const generatedTable = buildAcademicTable(toolResult?.table);
-  const contentWithoutPlaceholders = removeUnavailablePaperImages(rawContent, attachments, toolResult);
-  const contentWithRequiredToolImages = ensureToolImagesInPaper(contentWithoutPlaceholders, toolResult);
-  const contentWithRequiredImages = ensureAttachmentImagesInPaper(contentWithRequiredToolImages, attachments);
-  const contentWithImages = materializePaperImages(contentWithRequiredImages, attachments, toolResult);
-  const contentWithFootnotes = normalizeCitationMarkers(contentWithImages, citationEvidence);
-  return generatedTable && !/<table\b/i.test(contentWithFootnotes) ? `${contentWithFootnotes}\n\n${generatedTable}` : contentWithFootnotes;
-}
-
 function getAgentOrchestrator(event) {
   const toolRegistry = new ToolRegistry({
     userDataPath: app.getPath('userData'),
-    scriptPath: path.join(__dirname, '../scripts/data_analysis.py'),
+    scriptPath: path.join(__dirname, '../scripts/data_analysis.py').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1'),
     resolveAttachment: resolveConversationAttachment,
     loadSettings,
     saveToolRun: (run) => workspaceStore.saveToolRun(run),
+    requestModel,
   });
   return new AgentOrchestrator({
     workspaceStore,
@@ -287,6 +211,9 @@ function getAgentOrchestrator(event) {
     postProcessContent: postProcessAgentContent,
     emitStream: (requestId, delta) => {
       if (!event.sender.isDestroyed()) event.sender.send('draft-stream-chunk', { requestId, delta });
+    },
+    emitStatus: (requestId, payload) => {
+      if (!event.sender.isDestroyed()) event.sender.send('agent-task-status', { requestId, ...payload });
     },
     react: sendPetReaction,
     playCompletion: playCompletionSound,
@@ -415,8 +342,12 @@ function openWorkspace() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      backgroundThrottling: false,
     },
   });
+  secureWindow(workspaceWindow, path.join(__dirname, '..'));
   workspaceWindow.loadFile(path.join(__dirname, '../src/feed.html'));
   workspaceWindow.once('ready-to-show', () => workspaceWindow?.show());
   workspaceWindow.webContents.once('did-finish-load', () => workspaceWindow?.show());
@@ -527,6 +458,7 @@ function createMainWindow() {
 
   mainWindow.setAlwaysOnTop(settings.alwaysOnTop);
   mainWindow.setBackgroundColor('#00000000');
+  secureWindow(mainWindow, path.join(__dirname, '..'));
   mainWindow.loadFile(path.join(__dirname, '../src/index.html'));
 
   mainWindow.once('ready-to-show', () => {
@@ -556,18 +488,19 @@ function createMainWindow() {
   });
 }
 
-ipcMain.handle('show-context-menu', () => {
+handleApp('show-context-menu', () => {
   const menu = buildContextMenu();
   menu.popup({ window: mainWindow ?? undefined });
 });
 
-ipcMain.handle('get-settings', () => ({ ...loadSettings(), growthStage: getGrowthStage() }));
-ipcMain.handle('consume-launch-reminder', () => {
+handleApp('get-settings', () => ({ ...loadSettings(), growthStage: getGrowthStage() }));
+handleApp('consume-launch-reminder', () => {
   if (reminderShownThisLaunch) return false;
   reminderShownThisLaunch = true;
   return true;
 });
-ipcMain.handle('save-settings', (_event, partial) => {
+handleApp('save-settings', (_event, partial) => {
+  if (partial?.api) throw new Error('AI 配置请使用专门的安全保存入口。');
   const settings = saveSettings(partial);
   if (partial && Object.prototype.hasOwnProperty.call(partial, 'pet')) {
     mainWindow?.webContents.send('pet-changed', settings.pet);
@@ -579,11 +512,11 @@ ipcMain.handle('save-settings', (_event, partial) => {
   }
   return settings;
 });
-ipcMain.handle('get-pet-window-position', () => {
+handleApp('get-pet-window-position', () => {
   const [x, y] = mainWindow?.getPosition() ?? [0, 0];
   return { x, y };
 });
-ipcMain.on('move-pet-window', (_event, target) => {
+onApp('move-pet-window', (_event, target) => {
   if (!mainWindow) return;
   const x = Number(target?.x);
   const y = Number(target?.y);
@@ -595,20 +528,20 @@ ipcMain.on('move-pet-window', (_event, target) => {
     Math.round(Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - PET_WINDOW.height))),
   );
 });
-ipcMain.on('end-pet-window-drag', () => {
+onApp('end-pet-window-drag', () => {
   if (!mainWindow) return;
   const [x, y] = mainWindow.getPosition();
   saveSettings({ petPosition: { x, y } });
 });
-ipcMain.on('set-pet-reaction', (_event, payload) => {
+onApp('set-pet-reaction', (_event, payload) => {
   const allowed = new Set(['idle', 'waving', 'jumping', 'failed', 'waiting', 'running', 'review']);
   const state = allowed.has(payload?.state) ? payload.state : 'idle';
   sendPetReaction(state, typeof payload?.message === 'string' ? payload.message.slice(0, 120) : '', payload || {});
 });
-ipcMain.handle('open-workspace', () => openWorkspace());
-ipcMain.handle('show-pet-mode', () => showPetMode());
-ipcMain.handle('hide-pet', () => hidePetWindow());
-ipcMain.handle('choose-document-files', async () => {
+handleApp('open-workspace', () => openWorkspace());
+handleApp('show-pet-mode', () => showPetMode());
+handleApp('hide-pet', () => hidePetWindow());
+handleApp('choose-document-files', async () => {
   const result = await dialog.showOpenDialog(workspaceWindow || mainWindow, {
     title: '选择要投喂的论文资料',
     properties: ['openFile', 'multiSelections'],
@@ -623,28 +556,33 @@ ipcMain.handle('choose-document-files', async () => {
   return result.filePaths;
 });
 
-ipcMain.handle('choose-conversation-files', async () => {
+handleApp('choose-conversation-files', async (_event, projectId, folder = false) => {
   const result = await dialog.showOpenDialog(workspaceWindow || mainWindow, {
-    title: '选择本轮工作文件（不会加入项目资料库或参考文献）',
-    properties: ['openFile', 'multiSelections'],
+    title: folder ? '添加文件夹到当前项目' : '添加文件到当前项目',
+    properties: folder ? ['openDirectory', 'multiSelections'] : ['openFile', 'multiSelections'],
     filters: [
       { name: '工作文件', extensions: ['pdf', 'txt', 'md', 'docx', 'csv', 'xlsx', 'zip', 'png', 'jpg', 'jpeg', 'json', 'py', 'r'] },
       { name: '全部文件', extensions: ['*'] },
     ],
   });
   if (result.canceled) return [];
-  return prepareConversationFiles(result.filePaths);
+  return require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths: result.filePaths });
 });
+handleApp('conversation-files-import', (_event, projectId, paths) => require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths }));
 
-ipcMain.handle('workspace-load', () => workspaceStore.loadWorkspace());
-ipcMain.handle('project-create', (_event, input) => workspaceStore.createProject(input));
-ipcMain.handle('project-create-from-task', (_event, task) => bootstrapProjectFromTask(task));
-ipcMain.handle('conversation-create', (_event, projectId, input) => workspaceStore.createConversation(projectId, input));
-ipcMain.handle('conversation-set-active', (_event, projectId, conversationId) => workspaceStore.setActiveConversation(projectId, conversationId));
-ipcMain.handle('project-update', (_event, projectId, partial) => workspaceStore.updateProject(projectId, partial));
-ipcMain.handle('project-set-active', (_event, projectId) => workspaceStore.setActiveProject(projectId));
-ipcMain.handle('project-delete', (_event, projectId) => workspaceStore.deleteProject(projectId));
-ipcMain.handle('documents-import', async (_event, projectId, filePaths) => {
+handleApp('workspace-load', () => workspaceStore.loadWorkspace());
+handleApp('project-create', (_event, input) => workspaceStore.createProject(input));
+handleApp('project-create-from-task', (_event, task) => bootstrapProjectFromTask(task));
+handleApp('conversation-create', (_event, projectId, input) => workspaceStore.createConversation(projectId, input));
+handleApp('conversation-delete', (_event, projectId, conversationId) => workspaceStore.deleteConversation(projectId, conversationId));
+handleApp('conversation-set-active', (_event, projectId, conversationId) => workspaceStore.setActiveConversation(projectId, conversationId));
+handleApp('project-update', (_event, projectId, partial) => {
+  if (['empiricalPlans', 'projectFiles', 'removedAttachmentIds'].some(key => key in (partial || {}))) throw new Error('方案和项目文件只能由专门流程更新');
+  return workspaceStore.updateProject(projectId, partial);
+});
+handleApp('project-set-active', (_event, projectId) => workspaceStore.setActiveProject(projectId));
+handleApp('project-delete', (_event, projectId) => workspaceStore.deleteProject(projectId));
+handleApp('documents-import', async (_event, projectId, filePaths) => {
   sendPetReaction('review', '我在整理新资料，请稍等一下～');
   const result = await workspaceStore.importDocuments(projectId, filePaths);
   const project = result.state.projects.find((item) => item.id === projectId);
@@ -654,19 +592,19 @@ ipcMain.handle('documents-import', async (_event, projectId, filePaths) => {
   sendPetReaction(result.rejected.length && !result.imported.length ? 'failed' : 'jumping', result.imported.length ? `成功投喂 ${result.imported.length} 份资料！` : '这次没有成功加入资料。');
   return result;
 });
-ipcMain.handle('document-remove', async (_event, projectId, documentId) => {
+handleApp('document-remove', async (_event, projectId, documentId) => {
   const state = workspaceStore.removeDocument(projectId, documentId);
   const project = state.projects.find((item) => item.id === projectId);
   if (project) await ragStore.indexProject(project);
   return state;
 });
-ipcMain.handle('rag-status', (_event, projectId) => {
+handleApp('rag-status', (_event, projectId) => {
   const state = workspaceStore.loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
   return ragStore.getStatus(project);
 });
-ipcMain.handle('rag-rebuild', async (_event, projectId) => {
+handleApp('rag-rebuild', async (_event, projectId) => {
   sendPetReaction('running', '正在重建论文知识库…');
   const state = workspaceStore.loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
@@ -675,33 +613,42 @@ ipcMain.handle('rag-rebuild', async (_event, projectId) => {
   sendPetReaction('jumping', '知识库已经准备好啦！');
   return ragStore.getStatus(project);
 });
-ipcMain.handle('draft-save', (_event, projectId, draft) => workspaceStore.saveDraft(projectId, draft));
+handleApp('draft-save', (_event, projectId, draft) => workspaceStore.saveDraft(projectId, draft));
 
-ipcMain.handle('api-save', (_event, config, apiKey) => {
+const agentApiService = createAgentApiService({ store: workspaceStore, loadSettings, saveSettings, providerRegistry });
+handleApp('agent-api-status', () => agentApiService.status());
+handleApp('agent-api-save', (_event, scenario, config, key, clear) => agentApiService.save(scenario, config, key, clear));
+handleApp('agent-api-test', (_event, scenario, config, key) => agentApiService.test(scenario, config, key));
+
+handleApp('api-save', (_event, config, apiKey) => {
   const providerId = AI_PROVIDERS[config?.provider] ? config.provider : 'deepseek';
-  const provider = getProvider(providerId);
+  const baseUrl = validateApiUrl(config?.baseUrl || AI_PROVIDERS[providerId].endpoint);
+  const model = String(config?.model || AI_PROVIDERS[providerId].model).trim();
+  const scenarios = config?.model ? Object.fromEntries(['planning', 'writing', 'chat', 'analysis'].map(name => [name, model])) : normalizeScenarios(config?.scenarios);
   const api = {
     provider: providerId,
-    baseUrl: provider.endpoint,
-    model: provider.model,
+    baseUrl,
+    model: scenarios.writing,
+    scenarios,
     keyMode: 'encrypted',
   };
+  api.agents = normalizeAgents(loadSettings().api.agents);
   const settings = saveSettings({ api });
   workspaceStore.setApiKey(apiKey, 'encrypted', providerId);
   return { settings, hasKey: workspaceStore.hasApiKey('encrypted', providerId) };
 });
 
-ipcMain.handle('api-status', (_event, providerId) => {
+handleApp('api-status', (_event, providerId) => {
   const settings = loadSettings();
   const selectedProvider = AI_PROVIDERS[providerId] ? providerId : settings.api.provider;
   const provider = getProvider(selectedProvider);
   return {
-    config: { ...settings.api, provider: selectedProvider, providerLabel: provider.label, model: provider.model },
+    config: { ...settings.api, provider: selectedProvider, providerLabel: provider.label },
     hasKey: workspaceStore.hasApiKey('encrypted', selectedProvider),
   };
 });
 
-ipcMain.handle('api-reveal-key', (_event, providerId) => {
+handleApp('api-reveal-key', (_event, providerId) => {
   const settings = loadSettings();
   const selectedProvider = AI_PROVIDERS[providerId] ? providerId : settings.api.provider;
   return workspaceStore.getApiKey('encrypted', selectedProvider);
@@ -710,38 +657,90 @@ ipcMain.handle('api-reveal-key', (_event, providerId) => {
 async function getDataEnvironmentStatus() {
   try {
     const python = await findPythonExecutable(loadSettings());
-    const code = "import sys, importlib.util, json; print(json.dumps({'python': sys.executable, 'version': sys.version.split()[0], 'packages': {name: bool(importlib.util.find_spec(name)) for name in ('pandas','openpyxl','matplotlib')}}))";
-    const stdout = await runProcess(python.executable, [...python.prefix, '-c', code]);
+    const code = "import sys, importlib.util, json; print(json.dumps({'python': sys.executable, 'version': sys.version.split()[0], 'packages': {name: bool(importlib.util.find_spec(name)) for name in ('pandas','numpy','scipy','openpyxl','matplotlib')}}))";
+    const stdout = await runProcess(python.executable, [...python.prefix, '-I', '-c', code]);
     const status = JSON.parse(stdout.trim());
-    status.ready = Object.values(status.packages).every(Boolean);
-    status.installCommand = `\"${status.python}\" -m pip install pandas openpyxl matplotlib`;
+    status.source = python.source;
+    status.sandbox = getSandboxStatus();
+    status.ready = Object.values(status.packages).every(Boolean) && status.sandbox.available;
+    if (!status.sandbox.available) status.error = status.sandbox.error;
+    status.installCommand = `\"${status.python}\" -m pip install pandas numpy scipy openpyxl matplotlib`;
+    if (python.source === 'bundled') status.installCommand = '';
     return status;
   } catch (error) {
-    return { ready: false, error: error.message, packages: {}, installCommand: 'python -m pip install pandas openpyxl matplotlib' };
+    const external = loadSettings().dataEnvironment?.runtimeMode === 'external';
+    return { ready: false, source: external ? 'external' : 'bundled', error: error.message, sandbox: getSandboxStatus(), packages: {}, installCommand: external ? 'python -m pip install pandas numpy scipy openpyxl matplotlib' : '' };
   }
 }
 
-ipcMain.handle('draft-cancel', (_event, requestId) => {
+handleApp('draft-cancel', (_event, requestId) => {
   const controller = activeGenerationControllers.get(requestId);
   if (!controller) return { canceled: false };
   controller.abort();
   return { canceled: true };
 });
 
-ipcMain.handle('api-test', async (_event, providerId, apiKey) => {
+// UC-SKILL-02 段落级应用 Skill：选中段落 → 润色/扩写/改实证风格，仅对该段重写。
+handleApp('draft-apply-skill', async (_event, projectId, { selectedText, selectedHtml, operation }) => {
+  const workspace = workspaceStore.loadWorkspace();
+  const project = workspace.projects.find((item) => item.id === projectId);
+  if (!project) throw new Error('项目不存在');
+  const text = String(selectedText || '').trim();
+  if (!text) throw new Error('未选中内容，请先在草稿里选中一段文字。');
+  if (!['polish', 'expand', 'empirical'].includes(operation)) throw new Error('未知的局部操作。');
+  const skillRuntime = new SkillRuntime(path.join(__dirname, '../assets/skills'));
+  return applyLocalEdit({ skillRuntime, requestModel, project, selectedText: text, selectedHtml, operation });
+});
+
+handleApp('api-test', async (_event, config, apiKey) => {
   const settings = loadSettings();
-  const selectedProvider = AI_PROVIDERS[providerId] ? providerId : settings.api.provider;
-  const key = String(apiKey || workspaceStore.getApiKey('encrypted', selectedProvider) || '').trim();
-  if (!key) throw new Error(`请先填写 ${getProvider(selectedProvider).label} API Key。`);
-  await providerRegistry.complete(selectedProvider, key, [{ role: 'user', content: '只回复：连接成功' }], { temperature: 0, maxTokens: 8 });
+  const providerId = typeof config === 'string'
+    ? (AI_PROVIDERS[config] ? config : settings.api.provider)
+    : (AI_PROVIDERS[config?.provider] ? config.provider : settings.api.provider);
+  const baseUrl = typeof config === 'object' && config ? config.baseUrl : null;
+  const model = typeof config === 'object' && config ? config.model : null;
+  const candidateUrl = normalizeBaseUrl(baseUrl || settings.api.baseUrl);
+  const allowStoredKey = providerId === settings.api.provider && candidateUrl === normalizeBaseUrl(settings.api.baseUrl);
+  const key = String(apiKey || (allowStoredKey ? workspaceStore.getApiKey('encrypted', providerId) : '') || '').trim();
+  if (!key) throw new Error(`请先填写 ${getProvider(providerId).label} API Key。`);
+  await providerRegistry.complete(providerId, key, [{ role: 'user', content: '只回复：连接成功' }], {
+    temperature: 0,
+    maxTokens: 8,
+    endpoint: resolveEndpoint(baseUrl, getProvider(providerId).endpoint),
+    ...(model ? { model } : {}),
+  });
   return { ok: true };
 });
 
-ipcMain.handle('data-environment-status', () => getDataEnvironmentStatus());
-ipcMain.handle('ocr-status', () => workspaceStore.getOcrStatus());
-ipcMain.handle('agent-quality-summary', (_event, projectId) => summarizeRuns(workspaceStore.listAgentRuns(projectId, 200)));
+handleApp('data-environment-status', () => getDataEnvironmentStatus());
+handleApp('empirical-result-preview', (_event, projectId, conversationId, revision) => {
+  const project = workspaceStore.loadWorkspace().projects.find(item => item.id === projectId);
+  if (!project) throw new Error('项目不存在');
+  const { resultVersion, chartBytes } = require('./empirical-artifacts');
+  const plan = resultVersion(project, conversationId, revision);
+  const rootPath = path.join(app.getPath('userData'), 'analysis-runs', projectId);
+  const results = (plan.results || []).map(result => ({ ...result, charts: (result.files || []).map(file => {
+    return { name: path.basename(file), dataUrl: `data:image/png;base64,${chartBytes(file, rootPath).toString('base64')}` };
+  }) }));
+  return { planId: plan.id, revision: plan.revision, steps: plan.steps, results };
+});
+handleApp('empirical-artifact-export', async (_event, projectId, conversationId, selection, reveal = false) => {
+  const project = workspaceStore.loadWorkspace().projects.find(item => item.id === projectId);
+  if (!project) throw new Error('项目不存在');
+  const { resultVersion, artifactFile } = require('./empirical-artifacts');
+  const plan = resultVersion(project, conversationId, selection?.revision);
+  const file = artifactFile(plan, selection, path.join(app.getPath('userData'), 'analysis-runs', projectId));
+  const picked = await dialog.showSaveDialog(workspaceWindow || mainWindow, { title: '另存结果文件', defaultPath: file.name, filters: [{ name: file.extension.toUpperCase() + ' 文件', extensions: [file.extension] }] });
+  if (picked.canceled || !picked.filePath) return { canceled: true };
+  if (path.extname(picked.filePath).toLowerCase() !== '.' + file.extension) throw new Error('请保留结果文件的原始扩展名');
+  fs.writeFileSync(picked.filePath, file.data);
+  if (reveal) shell.showItemInFolder(picked.filePath);
+  return { canceled: false, filePath: picked.filePath };
+});
+handleApp('ocr-status', () => workspaceStore.getOcrStatus());
+handleApp('agent-quality-summary', (_event, projectId) => summarizeRuns(workspaceStore.listAgentRuns(projectId, 200)));
 
-ipcMain.handle('draft-generate', async (event, projectId, request) => {
+handleApp('draft-generate', async (event, projectId, request) => {
   const controller = new AbortController();
   activeGenerationControllers.set(request.requestId, controller);
   sendPetReaction('review', '主人，我正在检索文献并认真思考…');
@@ -759,7 +758,38 @@ ipcMain.handle('draft-generate', async (event, projectId, request) => {
   }
 });
 
-ipcMain.handle('thesis-export-assembled', async (_event, projectId) => {
+// UC-FLOW-01：从存档点恢复续写（挂起期间上传的新资料由 request.attachments 带入，会进入召回范围）
+handleApp('draft-resume', async (event, projectId, runId, request) => {
+  if (activeGenerationControllers.has(runId)) throw new Error('任务仍在运行，请先停止再恢复。');
+  const controller = new AbortController();
+  activeGenerationControllers.set(request.requestId, controller);
+  sendPetReaction('review', '主人，我从上次断点的进度接着写啦…');
+  try {
+    return await getAgentOrchestrator(event).resume({ projectId, runId, request, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted || error.name === 'AbortError') {
+      sendPetReaction('waving', '已停止当前回复，等你新的引导。');
+      throw new Error('已停止当前回复');
+    }
+    sendPetReaction('failed', `主人，我遇到问题了：${error.message}`);
+    throw error;
+  } finally {
+    activeGenerationControllers.delete(request.requestId);
+  }
+});
+
+// 列出仍可恢复的挂起会话（供界面显示「已挂起」徽标与「恢复续写」按钮）
+handleApp('agent-suspended-list', (_event, projectId) => (workspaceStore.listAgentRuns(projectId, 200) || [])
+  .filter((run) => ['SUSPENDED', 'GENERATING', 'PLANNING'].includes(run.status) && run.checkpoint && !run.resumedByRunId && !activeGenerationControllers.has(run.id))
+  .map((run) => ({
+    id: run.id,
+    task: run.checkpoint.task,
+    completedIds: run.checkpoint.completedIds || [],
+    savedAt: run.checkpoint.savedAt || null,
+    conversationId: run.checkpoint.conversationId || null,
+  })));
+
+handleApp('thesis-export-assembled', async (_event, projectId) => {
   const state = workspaceStore.loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
@@ -775,7 +805,7 @@ ipcMain.handle('thesis-export-assembled', async (_event, projectId) => {
   return { canceled: false, filePath: result.filePath, checks: draft.checks };
 });
 
-ipcMain.handle('draft-export-word', async (_event, projectId, draft) => {
+handleApp('draft-export-word', async (_event, projectId, draft, reveal = false) => {
   const state = workspaceStore.loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
@@ -787,11 +817,11 @@ ipcMain.handle('draft-export-word', async (_event, projectId, draft) => {
   if (result.canceled || !result.filePath) return { canceled: true };
   const output = await buildAcademicDocx(project, draft);
   fs.writeFileSync(result.filePath, output);
+  if (reveal === true) shell.showItemInFolder(result.filePath);
   return { canceled: false, filePath: result.filePath };
 });
 
 app.whenReady().then(() => {
-  if (squirrelEventHandled) return;
   app.setAppUserModelId('cn.openpaper.paperpet');
   createMainWindow();
   createTray();

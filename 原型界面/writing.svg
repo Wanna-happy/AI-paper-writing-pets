@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="Microsoft YaHei, Arial, sans-serif">
+  <rect width="960" height="600" fill="#f7f8fa"/>
+  <rect x="0" y="0" width="960" height="48" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="20" y="31" font-size="17" font-weight="bold" fill="#18344d">AI 论文宠物 · 文献综述写作</text>
+
+  <!-- 左侧：章节树 -->
+  <rect x="0" y="48" width="200" height="512" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="16" y="76" font-size="13" font-weight="bold" fill="#18344d">论文结构</text>
+  <text x="16" y="104" font-size="12" fill="#555">第一章 绪论</text>
+  <rect x="16" y="116" width="168" height="26" rx="5" fill="#eef5fb" stroke="#3f6f99"/>
+  <text x="28" y="134" font-size="12" fill="#3f6f99">第二章 文献综述</text>
+  <text x="16" y="162" font-size="12" fill="#555">第三章 研究设计</text>
+  <text x="16" y="190" font-size="12" fill="#8a93a0">…</text>
+
+  <!-- 中间：草稿编辑 -->
+  <rect x="200" y="48" width="560" height="512" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="220" y="80" font-size="15" font-weight="bold" fill="#18344d">第二章 文献综述</text>
+  <rect x="220" y="96" width="520" height="2" fill="#e3e6eb"/>
+  <text x="220" y="128" font-size="13" fill="#333">2.1 测量方法的研究脉络</text>
+  <text x="220" y="156" font-size="12" fill="#444">既有研究围绕变量测量形成两类路径。一类侧重主观</text>
+  <text x="220" y="176" font-size="12" fill="#444">量表的设计与信效度</text>
+  <rect x="300" y="170" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e0a96d"/>
+  <text x="308" y="184" font-size="11" fill="#9a6b2f">① 文献A 第3页</text>
+  <text x="220" y="204" font-size="12" fill="#444">（文献A）¹；另一类强调客观指标的可获得性（文献B）²。</text>
+  <text x="220" y="240" font-size="13" fill="#333">2.2 影响因素的分歧</text>
+  <text x="220" y="268" font-size="12" fill="#444">关于核心影响因素，存在"结构决定"与"能动重构"两</text>
+  <text x="220" y="288" font-size="12" fill="#444">种解释框架，其分歧集中在样本边界（文献C）³。</text>
+  <text x="220" y="330" font-size="11" fill="#8a93a0">① ② ③ = 可溯源引用标记，点击跳转资料库对应页码</text>
+  <rect x="220" y="500" width="520" height="40" rx="6" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="236" y="525" font-size="12" fill="#555">输入：继续写 2.3 研究缺口 ｜ 或选中段落 ▸ 应用 Skill</text>
+
+  <!-- 右侧：证据映射 -->
+  <rect x="760" y="48" width="200" height="512" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="776" y="76" font-size="13" font-weight="bold" fill="#18344d">证据映射</text>
+  <rect x="776" y="90" width="168" height="64" rx="6" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="788" y="112" font-size="11" fill="#333">① 文献A.pdf</text>
+  <text x="788" y="130" font-size="11" fill="#555">第 3 页 · 知识块 E1</text>
+  <text x="788" y="148" font-size="11" fill="#555">量表信效度</text>
+  <rect x="776" y="162" width="168" height="64" rx="6" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="788" y="184" font-size="11" fill="#333">② 文献B.pdf</text>
+  <text x="788" y="202" font-size="11" fill="#555">第 5 页 · 知识块 E2</text>
+  <text x="788" y="220" font-size="11" fill="#555">客观指标</text>
+  <rect x="776" y="234" width="168" height="64" rx="6" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="788" y="256" font-size="11" fill="#333">③ 文献C.pdf</text>
+  <text x="788" y="274" font-size="11" fill="#555">第 9 页 · 知识块 E3</text>
+  <text x="788" y="292" font-size="11" fill="#555">样本边界</text>
+  <text x="776" y="330" font-size="11" fill="#8a93a0">每段引用均可跳转</text>
+  <text x="776" y="350" font-size="11" fill="#c0392b">无证据不编实证</text>
+
+  <text x="20" y="588" font-size="10" fill="#aab2bd">线框图（占位）：以线上安装包真实界面为准，后续替换截图</text>
+</svg>

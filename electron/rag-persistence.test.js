@@ -26,7 +26,7 @@ async function run() {
       }],
     };
     const firstIndex = await ragStore.indexProject(project);
-    assert.strictEqual(firstIndex.version, 2);
+    assert.strictEqual(firstIndex.version, 3);
     assert.strictEqual(firstIndex.chunkVersion, 1);
     assert.strictEqual(firstIndex.embeddingVersion, 1);
     assert.strictEqual(firstIndex.documents['document-1'].parserVersion, 1);
@@ -55,6 +55,11 @@ async function run() {
     await ragStore.retrieve(project, '组织协同如何改善公共服务？', 3);
     const rebuilt = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     assert.strictEqual(rebuilt.documents['document-1'].parserVersion, 2);
+    project.documents.push({ id: 'old-data', name: 'legacy.csv', extension: '.csv', status: 'parsed', text: '不应召回的数据内容', fingerprint: 'data' });
+    await ragStore.indexProject(project);
+    const withoutData = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    assert(!withoutData.documents['old-data']);
+    assert(!withoutData.chunks.some(chunk => chunk.documentId === 'old-data'));
     console.log('rag persistence and cache test passed');
   } finally {
     Module._load = originalLoad;

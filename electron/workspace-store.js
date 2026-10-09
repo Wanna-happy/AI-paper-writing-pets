@@ -18,7 +18,7 @@ const EMPTY_STATE = {
   projects: [],
 };
 
-let sessionApiKey = '';
+const sessionApiKeys = new Map();
 let repository = null;
 let ocrRuntime = null;
 const workspaceCache = new LruCache({ max: 1, ttl: 5000 });
@@ -247,9 +247,26 @@ function createConversation(projectId, input = {}) {
   return state;
 }
 
-function setActiveConversation(projectId, conversationId) {
+// 删除对话：连同该对话的全部草稿一起移除；至少保留一个对话；必要时修正 activeConversationId。
+function deleteConversation(projectId, conversationId) {
   const state = loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
+  if (!project) throw new Error('项目不存在');
+  const remaining = (project.conversations || []).filter((item) => item.id !== conversationId);
+  if (!remaining.length) throw new Error('每个项目至少保留一个对话，不能删除最后一个。');
+  project.conversations = remaining;
+  project.drafts = (project.drafts || []).filter((draft) => draft.conversationId !== conversationId);
+  if (project.activeConversationId === conversationId || !remaining.some((item) => item.id === project.activeConversationId)) {
+    project.activeConversationId = remaining[0].id;
+  }
+  project.updatedAt = new Date().toISOString();
+  saveWorkspace(state);
+  getRepository().deleteConversationMemory(projectId, conversationId);
+  return state;
+}
+
+function setActiveConversation(projectId, conversationId) {
+  const state = loadWorkspace();  const project = state.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
   if (!project.conversations.some((item) => item.id === conversationId)) throw new Error('对话不存在');
   project.activeConversationId = conversationId;
@@ -296,7 +313,7 @@ async function importDocuments(projectId, filePaths) {
   if (!project) throw new Error('请先创建论文项目');
 
   const allFingerprints = new Set(
-    state.projects.flatMap((item) => item.documents.map((document) => document.fingerprint)),
+    project.documents.map((document) => document.fingerprint),
   );
   const imported = [];
   const rejected = [];
@@ -336,7 +353,7 @@ async function importDocuments(projectId, filePaths) {
         note: '',
       };
 
-      const parsed = await parseDocument(storedPath, { ocr: getOcrRuntime() });
+      const parsed = ['.csv', '.xlsx', '.xls'].includes(extension) ? { status: 'data', text: '' } : await parseDocument(storedPath, { ocr: getOcrRuntime() });
       document.status = parsed.status;
       document.text = parsed.text;
       if (parsed.ocr) document.ocr = parsed.ocr;
@@ -361,6 +378,8 @@ function removeDocument(projectId, documentId) {
   if (!project) throw new Error('项目不存在');
   const document = project.documents.find((item) => item.id === documentId);
   project.documents = project.documents.filter((item) => item.id !== documentId);
+  project.removedAttachmentIds = [...new Set([...(project.removedAttachmentIds || []), documentId, ...(project.projectFiles || []).filter(item => item.documentId === documentId).map(item => item.id)])];
+  project.projectFiles = (project.projectFiles || []).filter(item => item.documentId !== documentId);
   project.updatedAt = new Date().toISOString();
   saveWorkspace(state);
   if (document) removeDocumentCache(getLibraryPath(), projectId, document);
@@ -369,12 +388,20 @@ function removeDocument(projectId, documentId) {
 }
 
 function saveDraft(projectId, draft) {
+  if (draft.lengthReview?.contract) {
+    const check = require('./length-control').inspectLength(draft.content, draft.lengthReview.contract);
+    const warning = check.passed ? null : `篇幅未达标：正文 ${check.actual} 汉字，要求${check.contract.label}。正文已保存，可查看、编辑和导出。`;
+    draft = { ...draft, lengthReview: { ...draft.lengthReview, ...check, warning },
+      deliveryStatus: check.passed ? 'ready' : 'needs-revision',
+      checks: [...(draft.checks || []).filter(item => !item.startsWith('篇幅未达标：')), ...(warning ? [warning] : [])] };
+  }
   const state = loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
   const now = new Date().toISOString();
   normalizeConversations(project);
   const conversationId = draft.conversationId || project.activeConversationId;
+  if (!project.conversations.some(item => item.id === conversationId)) throw new Error('对话不属于当前项目');
   const saved = { id: draft.id || crypto.randomUUID(), createdAt: draft.createdAt || now, ...draft, conversationId, updatedAt: now };
   const existingIndex = project.drafts.findIndex((item) => item.id === saved.id);
   if (existingIndex >= 0) project.drafts[existingIndex] = saved;
@@ -386,7 +413,46 @@ function saveDraft(projectId, draft) {
   }
   project.updatedAt = now;
   saveWorkspace(state);
+  if (['api', 'local-draft'].includes(saved.mode)) saveConversationTurn(projectId, conversationId, { id: `draft:${saved.id}`, role: 'assistant', text: saved.content, notes: saved.checks || [], status: saved.mode === 'local-draft' ? 'local-draft' : saved.deliveryStatus || 'ready', createdAt: saved.createdAt });
   return saved;
+}
+
+function assertConversation(projectId, conversationId) {
+  const project = loadWorkspace().projects.find(item => item.id === projectId);
+  if (!project?.conversations.some(item => item.id === conversationId)) throw new Error('对话不属于当前项目');
+  return project;
+}
+
+function saveConversationTurn(projectId, conversationId, turn) {
+  assertConversation(projectId, conversationId);
+  const result = getRepository().saveConversationTurn(projectId, conversationId, turn);
+  workspaceCache.clear();
+  return result;
+}
+
+function listConversationTurns(projectId, conversationId) {
+  const project = assertConversation(projectId, conversationId);
+  const repository = getRepository();
+  if (!repository.listConversationTurns(projectId, conversationId).length) {
+    // Lazy migration: retain original requests as well as past delivered bodies.
+    for (const draft of project.drafts.filter(item => item.conversationId === conversationId && item.mode === 'api').slice().reverse()) {
+      const createdAt = draft.createdAt || draft.updatedAt || new Date().toISOString();
+      repository.saveConversationTurn(projectId, conversationId, { id: `legacy-user:${draft.id}`, role: 'user', text: draft.task || draft.title || '', createdAt });
+      repository.saveConversationTurn(projectId, conversationId, { id: `draft:${draft.id}`, role: 'assistant', text: draft.content, notes: draft.checks || [], status: draft.deliveryStatus || 'ready', createdAt });
+    }
+  }
+  return repository.listConversationTurns(projectId, conversationId);
+}
+
+function getConversationMemory(projectId, conversationId) {
+  assertConversation(projectId, conversationId);
+  return getRepository().getConversationMemory(projectId, conversationId);
+}
+
+function saveConversationMemory(projectId, conversationId, packet) {
+  assertConversation(projectId, conversationId);
+  if (packet.projectId !== projectId || packet.conversationId !== conversationId) throw new Error('记忆归属不匹配');
+  return getRepository().saveConversationMemory(projectId, conversationId, packet);
 }
 
 function resolveDraft(projectId, draftId) {
@@ -400,7 +466,7 @@ function resolveDraft(projectId, draftId) {
 }
 
 function setApiKey(key, mode, provider = 'deepseek') {
-  sessionApiKey = key || '';
+  if (key) sessionApiKeys.set(provider, key); else sessionApiKeys.delete(provider);
   if (mode === 'encrypted' && key) {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('当前系统无法使用安全存储');
     fs.mkdirSync(path.dirname(getKeyPath(provider)), { recursive: true });
@@ -408,10 +474,12 @@ function setApiKey(key, mode, provider = 'deepseek') {
   } else {
     fs.rmSync(getKeyPath(provider), { force: true });
   }
+  // An explicitly replaced/deleted key must not fall back to the legacy copy.
+  if (provider === 'deepseek') fs.rmSync(getLegacyKeyPath(), { force: true });
 }
 
 function getApiKey(mode, provider = 'deepseek') {
-  if (mode === 'session') return sessionApiKey;
+  if (mode === 'session') return sessionApiKeys.get(provider) || '';
   try {
     return safeStorage.decryptString(fs.readFileSync(getKeyPath(provider)));
   } catch {
@@ -458,6 +526,7 @@ module.exports = {
   closeWorkspace,
   createConversation,
   createProject,
+  deleteConversation,
   deleteProject,
   getApiKey,
   getOcrStatus,
@@ -465,6 +534,10 @@ module.exports = {
   importDocuments,
   loadWorkspace,
   listAgentRuns,
+  listConversationTurns,
+  getConversationMemory,
+  saveConversationMemory,
+  saveConversationTurn,
   removeDocument,
   resolveDraft,
   saveDraft,

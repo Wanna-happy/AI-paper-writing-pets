@@ -14,6 +14,9 @@ function evaluateRun({ plan, retrieval, toolResult, draft, timings = {} }) {
     toolUsed: toolResult?.kind || null,
     toolCacheHit: Boolean(toolResult?.cacheHit),
     outputCharacters: content.replace(/<[^>]+>/g, '').length,
+    lengthPassed: draft?.lengthReview?.passed ?? null,
+    bodyHanzi: draft?.lengthReview?.actual ?? null,
+    deliveryStatus: draft?.deliveryStatus || 'ready',
     timings,
   };
 }

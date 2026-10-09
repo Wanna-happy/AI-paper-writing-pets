@@ -28,11 +28,11 @@ function normalizeCitationMarkers(content, evidence = []) {
   return notes ? `${body.trim()}<section class="footnotes">${notes}</section>` : body;
 }
 
-function buildAcademicTable(table) {
+function buildAcademicTable(table, number = 1) {
   if (!table?.columns?.length || !table?.rows?.length) return '';
   const cells = (tag, values) => values.map((value) => `<${tag}>${escapeHtml(value)}</${tag}>`).join('');
-  const rows = table.rows.map((row) => `<tr>${cells('td', table.columns.map((column) => row[column]))}</tr>`).join('');
-  return `<p class="table-title">表 1 ${escapeHtml(table.title || '统计结果')}</p><table class="three-line"><thead><tr>${cells('th', table.columns)}</tr></thead><tbody>${rows}</tbody></table><p class="table-note">注：由本轮上传数据经工具计算得到。</p>`;
+  const rows = table.rows.map((row) => `<tr>${cells('td', Array.isArray(row) ? row : table.columns.map((column) => row[column]))}</tr>`).join('');
+  return `<p class="table-title">表 ${number} ${escapeHtml(table.title || '统计结果')}</p><table class="three-line"><thead><tr>${cells('th', table.columns)}</tr></thead><tbody>${rows}</tbody></table><p class="table-note">注：由本轮上传数据经工具计算得到。</p>`;
 }
 
 module.exports = { buildAcademicTable, normalizeCitationMarkers };

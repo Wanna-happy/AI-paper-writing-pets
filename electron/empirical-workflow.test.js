@@ -1,0 +1,56 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const e = require('./empirical-workflow');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'paper-pet-plan-'));
+const file = path.join(root, 'data.csv');
+fs.writeFileSync(file, 'x,y\n1,3\n2,5\n');
+const attachment = { id: 'f', name: 'data.csv', extension: '.csv' };
+const scope = { projectId: 'p', conversationId: 'c', attachments: [attachment], resolveAttachment: () => file };
+const input = { researchQuestion: 'x与y的关联', objective: 'association', dataFile: 'data.csv', dataDescription: '两个连续变量的横截面数据',
+  missingDataPolicy: '完整案例', interpretationLimits: '不推断因果', steps: [{ methodId: 'ols', label: '主回归', purpose: '估计关联', specification: 'y ~ x，HC3标准误', outputs: '系数表' }] };
+try {
+  const pending = e.normalizeProposal(input, scope);
+  assert.equal(pending.status, 'pending-confirmation');
+  assert.throws(() => e.executionPlan(pending), /确认/);
+  assert.throws(() => e.normalizeProposal({ ...input, steps: [{ ...input.steps[0], methodId: 'staggered-did' }] }, scope), /尚无/);
+  assert.throws(() => e.normalizeProposal(input, { ...scope, attachments: [attachment, attachment] }), /唯一/);
+  assert.throws(() => e.approvePlan(pending, { id: pending.id, revision: 9 }, scope), /版本/);
+  assert.throws(() => e.approvePlan(pending, { id: pending.id, revision: 1 }, { ...scope, projectId: 'other' }), /当前/);
+  const approved = e.approvePlan(pending, { id: pending.id, revision: 1 }, scope);
+  const dag = e.executionPlan(approved);
+  assert(dag.tasks.every(task => task.role === 'analyst'));
+  assert.equal(dag.tasks[0].empiricalStepId, 'a1');
+  assert.throws(() => e.validateStep(approved, 'a1', 'other.csv', scope.resolveAttachment), /超出/);
+  const value = { schemaVersion: 1, stepId: 'a1', methodId: 'ols', status: 'completed', sampleSize: 2, summary: 'OLS系数为2',
+    tables: [{ title: 'OLS回归', columns: ['变量', '系数'], rows: [['x', 2]] }], diagnostics: [], limitations: ['小样本'] };
+  const parse = v => e.parseResult('log\nPAPER_PET_RESULT=' + JSON.stringify(v), { plan: approved, step: approved.steps[0], sourceFingerprint: approved.dataFingerprint });
+  const result = parse(value);
+  assert.equal(result.projectId, 'p');
+  assert.throws(() => parse({ ...value, stepId: 'a9' }), /不一致/);
+  assert.throws(() => parse({ ...value, tables: [] }), /结果表/);
+  assert.throws(() => parse({ ...value, tables: [{ ...value.tables[0], rows: [['x']] }] }), /行列/);
+  assert.throws(() => e.parseResult('done', { plan: approved, step: approved.steps[0] }), /结构化/);
+  const review = { ...approved, status: 'results-review', results: [result] };
+  const writing = e.proposeWriting(review, { title: '实证分析', task: '如实报告关联与限制', sections: ['模型设定', '回归结果'], lengthRequirement: '1100字' });
+  assert.throws(() => e.approveWriting(writing, { id: writing.id, revision: 1, writingRevision: 3 }, scope), /版本/);
+  const writingApproved = e.approveWriting(writing, { id: writing.id, revision: 1, writingRevision: 1 }, scope);
+  assert.deepEqual(writing.writingProposal.resultStepIds, ['a1']);
+  assert.throws(() => e.proposeWriting(review, { ...writing.writingProposal, resultStepIds: ['a9'] }), /实际完成/);
+  assert.equal(e.executionPlan(writingApproved).tasks[0].role, 'writer');
+  assert.throws(() => e.proposeWriting({ ...review, results: [] }, writing.writingProposal), /先完成/);
+  assert.throws(() => e.proposeWriting({ ...review, steps: [...review.steps, { id: 'a2', required: true }] }, writing.writingProposal), /必要/);
+  const revised = e.normalizeProposal(input, { ...scope, previous: review });
+  assert.equal(revised.revision, 2); assert.equal(revised.history[0].results[0].sampleSize, 2);
+  assert.throws(() => e.approvePlan(revised, { id: revised.id, revision: 1 }, scope), /版本/);
+  const project = { id: 'p', empiricalPlans: { other: { id: 'keep' } } };
+  e.savePlan({ loadWorkspace: () => ({ projects: [project] }), updateProject: (_, patch) => Object.assign(project, patch) }, 'p', 'c', revised);
+  assert.equal(project.empiricalPlans.other.id, 'keep');
+  assert.throws(() => e.savePlan({ loadWorkspace: () => ({ projects: [project] }) }, 'p', 'foreign', revised), /跨项目/);
+  assert(!e.planningContext({ ...review, results: [{ ...result, code: 'PRIVATE_CODE_SENTINEL' }] }).includes('PRIVATE_CODE_SENTINEL'));
+  fs.appendFileSync(file, '3,7\n');
+  assert.throws(() => e.approvePlan(pending, { id: pending.id, revision: 1 }, scope), /数据已变化/);
+  assert.throws(() => e.validateStep(approved, 'a1', 'data.csv', scope.resolveAttachment), /数据发生变化/);
+  console.log('empirical scheme scope/version/data/analysis/writing gates passed');
+} finally { fs.rmSync(root, { recursive: true, force: true }); }

@@ -70,22 +70,26 @@ function getWritingLevel(project) {
 function parseLengthRequirement(task) {
   const source = String(task || '').replace(/,/g, '');
   const unit = (number, marker) => Math.round(Number(number) * (marker === '万' ? 10000 : marker === '千' ? 1000 : 1));
-  const range = source.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:—|－|-|至|到)\s*(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:字|字符)/i);
+  const range = source.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:—+|－+|-+|～|~|至|到)\s*(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:个\s*)?(?:中文字符|汉字|字符|字)/i);
   if (range) {
     const minimum = unit(range[1], range[2] || range[4]);
     const maximum = unit(range[3], range[4] || range[2]);
-    return { label: `${minimum}—${maximum} 个中文字符`, minimum, maximum, source: 'user' };
+    if (minimum > maximum) throw new Error('篇幅范围的下限不能大于上限');
+    return { label: `${minimum}—${maximum} 个中文字符`, minimum, maximum, metric: 'hanzi', source: 'user' };
   }
-  const single = source.match(/(?:约|大约|左右|不少于|至少|控制在|篇幅为|字数为|正文)?\s*(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:字|字符)/i);
+  const single = source.match(/(?:约|大约|左右|不少于|至少|不超过|至多|最多|控制在|篇幅为|字数为|正文)?\s*(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:个\s*)?(?:中文字符|汉字|字符|字)/i);
   if (!single) return null;
   const target = unit(single[1], single[2]);
   if (/不少于|至少/.test(source.slice(Math.max(0, single.index - 8), single.index + single[0].length))) {
-    return { label: `不少于 ${target} 个中文字符`, minimum: target, maximum: null, source: 'user' };
+    return { label: `不少于 ${target} 个中文字符`, minimum: target, maximum: null, metric: 'hanzi', source: 'user' };
   }
-  return { label: `约 ${target} 个中文字符`, minimum: Math.round(target * 0.9), maximum: Math.round(target * 1.1), target, source: 'user' };
+  if (/不超过|至多|最多/.test(single[0])) return { label: `不超过 ${target} 个中文字符`, minimum: null, maximum: target, metric: 'hanzi', source: 'user' };
+  const approximate = /约|大约|左右/.test(single[0]) || /^\s*(?:左右|上下)/.test(source.slice(single.index + single[0].length));
+  return { label: `${approximate ? '约 ' : ''}${target} 个中文字符`, minimum: approximate ? Math.round(target * 0.9) : target, maximum: approximate ? Math.round(target * 1.1) : target, target, metric: 'hanzi', source: 'user' };
 }
 
 function buildLengthGuidance(project, task, outputContract = {}) {
+  outputContract = outputContract || {}; // 默认参数只对 undefined 生效；调用方可能显式传 null，这里兜底防空
   const level = getWritingLevel(project);
   const explicit = parseLengthRequirement(task);
   const source = String(task || '');
@@ -113,6 +117,7 @@ function buildLengthGuidance(project, task, outputContract = {}) {
   const priority = explicit
     ? `用户明确篇幅：${explicit.label}。这是本轮硬约束，优先于项目默认区间；除“至少/不超过”等单边约束外，完稿应控制在目标的约 ±10% 内。`
     : `用户未明确字数，按${level.label}和“${scope}”自动分配：${target}。`;
+  if (explicit) return `篇幅判定：${scope}\n用户明确篇幅：${explicit.label}。这是本轮总篇幅硬约束，覆盖项目与 Skill 的默认段长和篇幅预算。\n篇幅数据：${JSON.stringify(explicit)}\n计数口径：仅统计正文汉字，不计标题、脚注、参考文献、HTML 标签和引用标记。按总预算自行安排论证及各段长度，不强制每段达到默认长度。约数允许 ±10%；明确区间及单边限制严格按界限执行；未写“约”的单一字数按精确目标执行。生成后由程序计数，不足或超长将返修。`;
   return `篇幅判定：${scope}\nPlan 篇幅依据：${outputContract.lengthBasis || '按项目类型与任务范围自动分配'}\n${priority}\n全文基线：${level.documentRange}\n章节功能预算：${level.functionalBudget}\n段落展开：${level.paragraphRange}\n完稿审计：先完成该范围所需的全部论证单元，再在内部估算去除 HTML 标签后的中文字符数；明显不足时继续补充证据、比较、机制、方法说明、结果解释或边界，不用重复句和空话凑字。约 200 字只适合必要过渡、定义提示或局部回答，不能单独代替完整小节、章节或论文。段落长短服从论证功能，不把所有段落机械写成相同字数。`;
 }
 

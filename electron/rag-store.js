@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { app } = require('electron');
 const { LruCache } = require('./lru-cache');
 
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 3;
 const CHUNK_VERSION = 1;
 const EMBEDDING_VERSION = 1;
 const EMBEDDING_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
@@ -20,6 +20,7 @@ function clone(value) {
 }
 
 function getProjectFolder(projectId) {
+  if (typeof projectId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,127}$/i.test(projectId)) throw new Error('无效的项目ID');
   return path.join(app.getPath('userData'), 'library', projectId);
 }
 
@@ -42,15 +43,17 @@ function emptyIndex(projectId) {
 }
 
 function loadIndex(projectId) {
-  const cached = indexCache.get(projectId);
+  const cacheKey = getIndexPath(projectId);
+  const cached = indexCache.get(cacheKey);
   if (cached) return cached;
   try {
     const index = JSON.parse(fs.readFileSync(getIndexPath(projectId), 'utf8'));
-    if (index.version !== INDEX_VERSION
+    if (index.projectId !== projectId || index.chunks?.some(chunk => chunk.projectId !== projectId || !index.documents?.[chunk.documentId])
+      || index.version !== INDEX_VERSION
       || index.chunkVersion !== CHUNK_VERSION
       || index.embeddingVersion !== EMBEDDING_VERSION
       || index.model !== EMBEDDING_MODEL) return emptyIndex(projectId);
-    indexCache.set(projectId, index);
+    indexCache.set(cacheKey, index);
     return index;
   } catch {
     return emptyIndex(projectId);
@@ -64,7 +67,7 @@ function saveIndex(index) {
   const temporaryPath = `${indexPath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(temporaryPath, JSON.stringify(index), 'utf8');
   fs.renameSync(temporaryPath, indexPath);
-  indexCache.set(index.projectId, index);
+  indexCache.set(getIndexPath(index.projectId), index);
   retrievalCache.clear();
   return index;
 }
@@ -165,7 +168,7 @@ function localHashEmbedding(text) {
 async function getExtractor() {
   if (!extractorPromise) {
     extractorPromise = (async () => {
-      const transformers = await import('@xenova/transformers');
+      const transformers = await import('@huggingface/transformers');
       const modelCache = path.join(app.getPath('userData'), 'models');
       const modelFolder = path.join(modelCache, ...EMBEDDING_MODEL.split('/'));
       const modelWeights = path.join(modelFolder, 'onnx', 'model_quantized.onnx');
@@ -173,7 +176,7 @@ async function getExtractor() {
       transformers.env.cacheDir = modelCache;
       transformers.env.allowLocalModels = true;
       transformers.env.allowRemoteModels = false;
-      return transformers.pipeline('feature-extraction', EMBEDDING_MODEL, { quantized: true });
+      return transformers.pipeline('feature-extraction', EMBEDDING_MODEL, { dtype: 'q8' });
     })();
   }
   return extractorPromise;
@@ -201,17 +204,20 @@ async function embedTexts(texts) {
 }
 
 async function indexProject(project) {
-  const parsed = project.documents.filter((document) => document.status === 'parsed' && document.text);
+  const parsed = project.documents.filter((document) => document.status === 'parsed' && document.text && !['.csv', '.xlsx', '.xls'].includes(document.extension));
   const previous = loadIndex(project.id);
   const index = emptyIndex(project.id);
   const changedDocuments = [];
   for (const document of parsed) {
     const previousDocument = previous.documents[document.id];
     const unchanged = previous.updatedAt
+      && previousDocument?.contentHash === crypto.createHash('sha256').update(document.text).digest('hex')
+      && previousDocument?.name === document.name
       && previousDocument?.fingerprint === document.fingerprint
       && previousDocument?.parserVersion === (Number(document.parserVersion) || 0);
     index.documents[document.id] = {
       name: document.name,
+      contentHash: crypto.createHash('sha256').update(document.text).digest('hex'),
       fingerprint: document.fingerprint,
       parserVersion: Number(document.parserVersion) || 0,
       chunks: 0,
@@ -225,7 +231,7 @@ async function indexProject(project) {
     }
   }
   const changedChunks = changedDocuments.flatMap((document) => {
-    const chunks = chunkDocument(document);
+    const chunks = chunkDocument(document).map(chunk => ({ ...chunk, projectId: project.id }));
     index.documents[document.id].chunks = chunks.length;
     return chunks;
   });
@@ -284,13 +290,15 @@ function cosineScore(left, right) {
 
 async function retrieve(project, query, limit = 8) {
   let index = loadIndex(project.id);
-  const expected = project.documents.filter((document) => document.status === 'parsed' && document.text);
+  const expected = project.documents.filter((document) => document.status === 'parsed' && document.text && !['.csv', '.xlsx', '.xls'].includes(document.extension));
   const needsRebuild = expected.some((document) => index.documents[document.id]?.fingerprint !== document.fingerprint
+      || index.documents[document.id]?.name !== document.name
+      || index.documents[document.id]?.contentHash !== crypto.createHash('sha256').update(document.text).digest('hex')
       || index.documents[document.id]?.parserVersion !== (Number(document.parserVersion) || 0))
     || Object.keys(index.documents).some((documentId) => !expected.some((document) => document.id === documentId));
   if (needsRebuild || (!index.updatedAt && expected.length)) index = await indexProject(project);
 
-  const cacheKey = JSON.stringify([project.id, index.updatedAt, String(query || ''), Number(limit) || 8]);
+  const cacheKey = JSON.stringify([getIndexPath(project.id), index.updatedAt, String(query || ''), Number(limit) || 8]);
   const cached = retrievalCache.get(cacheKey);
   if (cached) return clone(cached);
 
@@ -308,7 +316,8 @@ async function retrieve(project, query, limit = 8) {
     queryVector = localHashEmbedding(query);
   }
 
-  const ranked = index.chunks.map((chunk) => {
+  const allowedDocumentIds = new Set(expected.map(document => document.id));
+  const ranked = index.chunks.filter(chunk => chunk.projectId === project.id && allowedDocumentIds.has(chunk.documentId)).map((chunk) => {
     const lexical = keywordScore(queryTerms, chunk.terms || extractTerms(chunk.text));
     const semantic = queryVector && chunk.embedding ? cosineScore(queryVector, decodeVector(chunk.embedding)) : 0;
     const semanticWeight = index.mode === 'local-hybrid' ? 0.78 : 0.55;
@@ -327,6 +336,7 @@ async function retrieve(project, query, limit = 8) {
   }
 
   const result = {
+    projectId: project.id,
     mode: index.mode,
     model: index.model,
     error: index.error || null,
@@ -380,6 +390,7 @@ async function retrieveMulti(project, queries, limit = 14) {
   }
 
   return {
+    projectId: project.id,
     mode: results[0].mode,
     model: results[0].model,
     error: [...new Set(results.map((result) => result.error).filter(Boolean))].join('；') || null,

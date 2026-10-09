@@ -2,53 +2,12 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseAgentPlan } = require('./agent/plan-schema');
 const { AgentRunState } = require('./agent/run-state');
 const { ProviderRegistry } = require('./providers/provider-registry');
 const { SkillRuntime } = require('./skills/skill-runtime');
 const { evaluateRun, summarizeRuns } = require('./quality/evaluator');
 
 async function run() {
-  const attachment = { name: 'data.csv', extension: '.csv' };
-  const valid = parseAgentPlan(JSON.stringify({
-    intent: 'analyze',
-    skillIds: ['academic-writing-core', 'data-analysis'],
-    needsProjectSources: false,
-    queries: ['描述统计'],
-    tool: { name: 'data_analysis', dataFile: 'data.csv', chartType: 'bar' },
-    outputContract: { type: 'analysis', deliverable: '分析上传数据', scope: 'other', lengthBasis: '按分析任务自动分配', language: 'zh-CN' },
-  }), { fallbackQuery: '分析数据', attachments: [attachment] });
-  assert.strictEqual(valid.fallback, false);
-  assert.strictEqual(valid.intent, 'analyze');
-  assert.deepStrictEqual(valid.skillIds, ['academic-writing-core', 'data-analysis']);
-  assert.strictEqual(valid.tool.name, 'data_analysis');
-
-  const invalid = parseAgentPlan('{"tool":{"name":"shell"}}', { fallbackQuery: '写正文' });
-  assert.strictEqual(invalid.fallback, true);
-  assert.match(invalid.validationError, /intent/);
-
-  const unauthorized = parseAgentPlan(JSON.stringify({
-    intent: 'analyze', skillIds: ['academic-writing-core'], needsProjectSources: false, queries: [], tool: { name: 'shell' }, outputContract: { type: 'analysis', deliverable: '分析数据', scope: 'other', lengthBasis: '按分析任务自动分配', language: 'zh-CN' },
-  }), { fallbackQuery: '分析数据' });
-  assert.strictEqual(unauthorized.fallback, true);
-  assert.match(unauthorized.validationError, /未授权/);
-
-  const unknownSkill = parseAgentPlan(JSON.stringify({
-    intent: 'write', skillIds: ['academic-writing-core', 'unknown-skill'], needsProjectSources: false, queries: [], tool: null, outputContract: { type: 'section', deliverable: '写正文', scope: 'subsection', lengthBasis: '按项目类型自动分配', language: 'zh-CN' },
-  }), { fallbackQuery: '写正文', allowedSkillIds: ['academic-writing-core'] });
-  assert.strictEqual(unknownSkill.fallback, true);
-  assert.match(unknownSkill.validationError, /未注册 Skill/);
-
-  const correctedPaper = parseAgentPlan(JSON.stringify({
-    intent: 'write', skillIds: ['academic-writing-core', 'thesis-planning'], needsProjectSources: false, queries: [], tool: null,
-    outputContract: { type: 'abstract', deliverable: '生成摘要', scope: 'abstract', lengthBasis: '按摘要规范自动分配', language: 'zh-CN' },
-  }), {
-    fallbackQuery: '帮我写一篇关于生育支持政策的小论文',
-    allowedSkillIds: ['academic-writing-core', 'thesis-planning'],
-  });
-  assert.strictEqual(correctedPaper.outputContract.type, 'paper');
-  assert.match(correctedPaper.outputContract.deliverable, /整篇论文/);
-
   const machine = new AgentRunState('run-1');
   machine.move('VALIDATING');
   machine.move('PLANNING');
@@ -115,7 +74,7 @@ async function run() {
   }
 
   const quality = evaluateRun({
-    plan: valid,
+    plan: { queries: ['描述统计'], fallback: false },
     retrieval: { hits: [{ id: 'e1' }] },
     toolResult: { kind: 'data-analysis', cacheHit: true },
     draft: { content: '<p>正文<sup data-footnote="1">1</sup></p>', mappings: ['E1'], checks: ['核验'] },

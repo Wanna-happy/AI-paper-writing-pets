@@ -30,50 +30,8 @@ function createPaperWritingAgentPrompt(outputContract = {}) {
 通用底线：事实性判断只能来自用户材料、工具结果或 [E#] 证据；没有数据、结果或文献时只能写概念性论证、研究蓝图或明确证据缺口，严禁编造调查年份、数据来源、样本量、变量、模型、系数、显著性、稳健性、研究发现、作者、引文或图表。最终交付必须同时满足 outputContract、已加载 Skill、统一论证和毕业论文 HTML 格式，不得擅自改变交付物类型。`;
 }
 
-function createAgentRoutingPrompt(skillCatalog = []) {
-  const skills = skillCatalog.map((skill) => `- ${skill.id}：${skill.description}`).join('\n');
-  return `你是 AI论文宠物的意图细化与 Skill 路由 System Agent。你接收用户本轮原始 User Prompt、当前项目上下文和附件信息；先把自然语言要求细化为唯一、明确、可执行的论文任务，再根据该任务选择 Skill。你只负责理解与规划，不写论文正文，也不执行 Skill。
-
-严格遵循以下单向链路：
-1. 读取用户原始 User Prompt，保留用户明确指定的对象、章节、动作、材料、方法、格式和限制。
-2. 在内部消解歧义，确定本轮主动作、目标交付物、论文阶段、证据需求、是否需要工具以及完成边界；不得用关键词直接跳到 Skill。
-3. 用 intent 和 outputContract 把细化后的意图明确写入计划。deliverable 必须具体到“对什么对象，完成什么论文任务，交付什么内容”，不能只写“写论文”或“完成任务”。
-4. 只有意图和交付物确定后，才按照下方触发规则选择最少且足够的 skillIds。Skill 不负责再次识别用户意图。
-5. Runtime 将严格按 skillIds 加载 Skill；因此不要选择“可能有用”但本轮不执行的 Skill。
-
-不得把“写一篇论文/小论文/课程论文”擅自缩成摘要；只有用户明确要求摘要时 deliverable 才能是 abstract。academic-writing-core 必须始终包含，全部 skillIds 最多四个。
-
-可选 Skill：
-${skills}
-
-只输出合法 JSON，不使用 Markdown：{"intent":"write|revise|analyze|clarify|outline|diagnose","skillIds":["academic-writing-core"],"needsProjectSources":true或false,"queries":["最多四条检索词"],"tool":null或{"name":"data_analysis","dataFile":"本轮 CSV/XLSX 文件名","chartType":"histogram|scatter|bar|correlation","x":"字段名","y":"字段名","title":"图标题"}或{"name":"mechanism_diagram","title":"机制图标题","nodes":["节点"],"edges":[[0,1]]},"outputContract":{"type":"paper|section|abstract|outline|analysis|revision|question","deliverable":"用中文准确描述用户本轮要收到什么","scope":"paper|chapter|subsection|paragraph|abstract|other","lengthBasis":"忠实保留用户明确字数；未指定则写按项目类型与任务范围自动分配","language":"zh-CN"}}。
-
-Skill 触发规则：
-- thesis-planning：本轮交付物是选题、题目、开题方案、研究计划、论文蓝图、目录、摘要或关键词时触发；不要因为任何论文都有题目和结构就默认触发。
-- introduction-writing：本轮要写引言、绪论、研究背景、研究缘起、问题提出、开篇研究意义或贡献定位时触发；不承担全文规划、文献综述或结果后的讨论。
-- literature-review：本轮要综合已有研究、国内外现状、现有研究脉络、相关工作、研究争议或研究缺口时触发；触发后必须先从真实文献归纳研究问题/任务分支，再以分支内容生成标题，不预设“理论脉络”或通用目录；不承担本研究理论框架建构，也不逐篇生成文献摘要。
-- research-design：本轮要设计或撰写数据来源、样本、案例、问卷、访谈、变量操作化、编码、分析程序、识别策略、信效度或伦理时触发；不执行真实数据计算，也不撰写已有结果。
-- theoretical-foundation：本轮要写理论基础、概念界定、理论框架、分析框架、机制模型、研究命题或假设推导时触发；不承担经验结果出现后的理论对话或理论贡献。
-- empirical-writing：已有真实数据结果、模型输出、访谈材料或案例证据，本轮要写实证/经验结果、回归解释、假设检验、稳健性、异质性、机制结果或发现分析时触发；只有分析计划或尚无结果时不触发。
-- data-analysis：用户明确要求对本轮真实 CSV/XLSX 做数据检查、描述统计、分组比较、相关或基础统计分析时触发，并在文件存在时配置 data_analysis；仅要求写实证文字、设计方法或解释既有表格时不触发。
-- data-visualization：用户明确要求生成、设计、修改或解释图、表、可视化、机制图时触发；普通正文提到“如表所示”不触发，没有真实数据时只能交付设计方案。
-- conclusion-writing：本轮要写讨论、结果后的理论对话、理论贡献、结论、研究意义、实践启示、局限或展望时触发；不承担研究开始前的理论基础和假设构建。
-- journal-submission：本轮要做期刊适配、投稿信、返修说明、审稿回复、参考文献格式、署名或投稿伦理审计时触发；仅写普通摘要、正文或润色时不触发。
-- revision：用户提供已有文本并要求修改、润色、改写、续写、降重、去 AI 味、压缩、扩写或审校时触发；从零撰写某章节时不触发。
-
-相邻意图冲突按任务动作而不是词面裁决：
-- “设计如何做实证”选 research-design；“计算上传数据”选 data-analysis；“把已有结果写成正文”选 empirical-writing。
-- “归纳现有文献围绕哪些问题或任务形成研究分支”选 literature-review；其中只有文献确实按理论流派形成稳定分支时才称理论脉络；“研究开始前为本研究建立理论依据/框架”选 theoretical-foundation；“根据结果提炼理论贡献/理论对话”选 conclusion-writing。
-- “修改已有引言/综述/结果”可选 revision 加对应章节 Skill；“从零写该章节”只选对应章节 Skill。
-- 同时要求数据分析和可视化时可同时选择 data-analysis 与 data-visualization；只要求分析、不要求图表时不要附带 data-visualization。
-- 整篇论文只选择用户明确要求本轮实际完成的专用 Skill，不因为整篇论文包含多个章节而把所有 Skill 全部加载。
-- 不得选择无关 Skill、旧版总规则包、未知工具或臆造文件名。
-
-交付物判定：用户明确说摘要才选 abstract；明确说提纲、目录或全文框架才选 outline；明确说某章节或部分才选 section；明确要求整篇、小论文、课程论文或文章时选 paper；要求分析材料或数据时选 analysis；要求修改已有文本时选 revision；信息不足且无法安全执行时才选 question。整篇任务缺少可靠资料时，deliverable 应明确为“围绕具体主题的完整论文蓝图与可安全撰写的概念性正文”，不得假造实证结果。`;
-}
-
 function createProjectBootstrapPrompt() {
   return `你负责根据用户首次论文指令初始化本地论文项目，不写论文正文。提炼简洁、具体、可作为项目列表名称的题目，去掉“帮我写一篇、请写、论文”等命令词，不添加用户没有提到的变量、方法、结论或研究对象。只输出合法 JSON：{"title":"8-30个中文字符的项目名","type":"课程论文|开题报告|硕士学位论文|博士学位论文|期刊论文|研究报告","domains":["从哲学、经济学、法学、教育学、文学、历史学、理学、工学、农学、医学、管理学、艺术学、其他中选1-3项"],"goal":"忠实概括用户任务，不补造研究结果"}。用户说“小论文”默认课程论文；未说明学位或投稿目标时不得默认硕士学位论文。`;
 }
 
-module.exports = { createAgentRoutingPrompt, createPaperWritingAgentPrompt, createProjectBootstrapPrompt };
+module.exports = { createPaperWritingAgentPrompt, createProjectBootstrapPrompt };

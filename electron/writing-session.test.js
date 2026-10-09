@@ -31,3 +31,20 @@ assert(!buildProjectMemory({ activeConversationId: 'c1', drafts: [
 ] }).includes('不应串入'));
 
 console.log('writing session test passed');
+for (const unit of ['字', '个字', '汉字', '个汉字', '中文字符', '个中文字符', '字符']) {
+  const parsed = parseLengthRequirement(`正文约900——1200${unit}`);
+  assert.equal(parsed.minimum, 900);
+  assert.equal(parsed.maximum, 1200);
+}
+assert.equal(parseLengthRequirement('不超过1100字').minimum, null);
+assert.equal(parseLengthRequirement('不超过1100字').maximum, 1100);
+assert.equal(parseLengthRequirement('至少1100个汉字').maximum, null);
+assert.equal(parseLengthRequirement('约1100字').minimum, 990);
+assert.equal(parseLengthRequirement('1100字左右').maximum, 1210);
+assert.equal(parseLengthRequirement('写1100字').minimum, 1100);
+assert.equal(parseLengthRequirement('写1100字').maximum, 1100);
+assert.throws(() => parseLengthRequirement('1200—900字'), /下限/);
+const explicitGuidance = buildLengthGuidance(project, '写900—1200个汉字');
+assert(!explicitGuidance.includes('用户未明确字数'));
+assert(!explicitGuidance.includes('350—650'));
+assert(!explicitGuidance.includes('全文基线'));

@@ -11,18 +11,22 @@ contextBridge.exposeInMainWorld('petAPI', {
   showPetMode: () => ipcRenderer.invoke('show-pet-mode'),
   hidePet: () => ipcRenderer.invoke('hide-pet'),
   chooseDocumentFiles: () => ipcRenderer.invoke('choose-document-files'),
-  chooseConversationFiles: () => ipcRenderer.invoke('choose-conversation-files'),
+  chooseConversationFiles: (projectId, folder = false) => ipcRenderer.invoke('choose-conversation-files', projectId, folder),
+  importConversationFiles: (projectId, paths) => ipcRenderer.invoke('conversation-files-import', projectId, paths),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   consumeLaunchReminder: () => ipcRenderer.invoke('consume-launch-reminder'),
   saveSettings: (partial) => ipcRenderer.invoke('save-settings', partial),
   getDataEnvironmentStatus: () => ipcRenderer.invoke('data-environment-status'),
+  getEmpiricalResultPreview: (projectId, conversationId, revision) => ipcRenderer.invoke('empirical-result-preview', projectId, conversationId, revision),
+  exportEmpiricalArtifact: (projectId, conversationId, selection, reveal) => ipcRenderer.invoke('empirical-artifact-export', projectId, conversationId, selection, reveal),
   getOcrStatus: () => ipcRenderer.invoke('ocr-status'),
   getAgentQualitySummary: (projectId) => ipcRenderer.invoke('agent-quality-summary', projectId),
   loadWorkspace: () => ipcRenderer.invoke('workspace-load'),
   createProject: (input) => ipcRenderer.invoke('project-create', input),
   createProjectFromTask: (task) => ipcRenderer.invoke('project-create-from-task', task),
   createConversation: (projectId, input) => ipcRenderer.invoke('conversation-create', projectId, input),
+  deleteConversation: (projectId, conversationId) => ipcRenderer.invoke('conversation-delete', projectId, conversationId),
   setActiveConversation: (projectId, conversationId) => ipcRenderer.invoke('conversation-set-active', projectId, conversationId),
   updateProject: (projectId, partial) => ipcRenderer.invoke('project-update', projectId, partial),
   setActiveProject: (projectId) => ipcRenderer.invoke('project-set-active', projectId),
@@ -34,17 +38,28 @@ contextBridge.exposeInMainWorld('petAPI', {
   saveDraft: (projectId, draft) => ipcRenderer.invoke('draft-save', projectId, draft),
   generateDraft: (projectId, request) => ipcRenderer.invoke('draft-generate', projectId, request),
   cancelDraft: (requestId) => ipcRenderer.invoke('draft-cancel', requestId),
+  resumeDraft: (projectId, runId, request) => ipcRenderer.invoke('draft-resume', projectId, runId, request),
+  listSuspendedDrafts: (projectId) => ipcRenderer.invoke('agent-suspended-list', projectId),
+  applySkill: (projectId, payload) => ipcRenderer.invoke('draft-apply-skill', projectId, payload),
   onDraftStream: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('draft-stream-chunk', listener);
     return () => ipcRenderer.removeListener('draft-stream-chunk', listener);
   },
-  exportWord: (projectId, draft) => ipcRenderer.invoke('draft-export-word', projectId, draft),
+  onTaskStatus: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('agent-task-status', listener);
+    return () => ipcRenderer.removeListener('agent-task-status', listener);
+  },
+  exportWord: (projectId, draft, reveal) => ipcRenderer.invoke('draft-export-word', projectId, draft, reveal),
   exportAssembledThesis: (projectId) => ipcRenderer.invoke('thesis-export-assembled', projectId),
   getApiStatus: (providerId) => ipcRenderer.invoke('api-status', providerId),
   revealApiKey: (providerId) => ipcRenderer.invoke('api-reveal-key', providerId),
-  testApi: (providerId, apiKey) => ipcRenderer.invoke('api-test', providerId, apiKey),
+  testApi: (config, apiKey) => ipcRenderer.invoke('api-test', config, apiKey), // config: { provider, baseUrl, model } 或 providerId 字符串
   saveApi: (config, apiKey) => ipcRenderer.invoke('api-save', config, apiKey),
+  getAgentApiStatus: () => ipcRenderer.invoke('agent-api-status'),
+  saveAgentApi: (scenario, config, key, clearKey = false) => ipcRenderer.invoke('agent-api-save', scenario, config, key, clearKey),
+  testAgentApi: (scenario, config, key) => ipcRenderer.invoke('agent-api-test', scenario, config, key),
   onPetChanged: (callback) => {
     const listener = (_event, petId) => callback(petId);
     ipcRenderer.on('pet-changed', listener);

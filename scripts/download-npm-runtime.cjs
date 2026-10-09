@@ -1,0 +1,21 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
+(async () => {
+  const root = path.join(__dirname, '..', '.local-runtime');
+  const metadata = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.release-checks/upgrade-metadata.json'))).npm;
+  const response = await fetch(metadata.dist.tarball, { signal: AbortSignal.timeout(60000) });
+  if (!response.ok) throw new Error('npm runtime download failed');
+  const bytes = Buffer.from(await response.arrayBuffer());
+  const digest = 'sha512-' + crypto.createHash('sha512').update(bytes).digest('base64');
+  if (digest !== metadata.dist.integrity) throw new Error('npm runtime integrity check failed');
+  fs.mkdirSync(path.join(root, 'npm'), { recursive: true });
+  const archive = path.join(root, 'npm.tgz');
+  fs.writeFileSync(archive, bytes);
+  const listing = spawnSync('tar', ['-tzf', archive], { encoding: 'utf8' });
+  if (listing.status !== 0 || listing.stdout.split(/\r?\n/).filter(Boolean).some(name => !name.startsWith('package/') || name.split('/').includes('..'))) throw new Error('Unsafe npm archive paths');
+  const unpack = spawnSync('tar', ['-xzf', archive, '-C', path.join(root, 'npm')], { stdio: 'inherit' });
+  if (unpack.status !== 0) throw new Error('npm runtime extraction failed');
+  console.log('Verified local npm runtime: ' + metadata.latest);
+})().catch(error => { console.error(error.message); process.exitCode = 1; });

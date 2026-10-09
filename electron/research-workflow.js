@@ -213,6 +213,7 @@ function uniqueQueries(queries) {
 }
 
 function sectionFromSkillIds(skillIds = [], outputContract = {}) {
+  outputContract = outputContract || {}; // 默认参数只对 undefined 生效；兜底防空
   if (outputContract.type === 'abstract') return SECTION_RULES.find((rule) => rule.id === 'abstract');
   if (outputContract.type === 'paper') return SECTION_RULES.find((rule) => rule.id === 'paper');
   const sectionId = skillIds.map((skillId) => SKILL_SECTION_IDS.get(skillId)).find(Boolean);
@@ -220,6 +221,7 @@ function sectionFromSkillIds(skillIds = [], outputContract = {}) {
 }
 
 function buildResearchWorkflow(project, task, skillIds = [], outputContract = {}) {
+  outputContract = outputContract || {}; // 默认参数只对 undefined 生效；兜底防空
   const section = skillIds.length ? sectionFromSkillIds(skillIds, outputContract) : detectSection(task);
   const writingMode = detectWritingMode(project, '');
   const context = [projectDomains(project), project?.title, project?.goal, task].filter(Boolean).join(' ');

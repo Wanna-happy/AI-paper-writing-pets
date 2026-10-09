@@ -2,8 +2,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const { runDataAnalysis } = require('./code-analysis');
+const { bundledPythonPath } = require('../python-runtime');
 
-const TOOL_VERSION = 1;
+const TOOL_VERSION = 3;
 
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -27,12 +29,18 @@ function runProcess(executable, args, options = {}) {
 }
 
 async function findPythonExecutable(settings = {}) {
+  if (settings.dataEnvironment?.runtimeMode !== 'external') {
+    const bundled = bundledPythonPath();
+    if (!bundled) throw new Error('内置 Python 环境缺失，请重新安装完整安装包。');
+    await runProcess(bundled, ['-I', '--version']);
+    return { executable: bundled, prefix: [], source: 'bundled' };
+  }
   const configured = String(settings.dataEnvironment?.pythonPath || process.env.PAPER_PET_PYTHON || '').trim();
   const candidates = configured ? [[configured, ['--version']]] : [['python', ['--version']], ['py', ['-3', '--version']]];
   for (const [executable, args] of candidates) {
     try {
       await runProcess(executable, args);
-      return executable === 'py' ? { executable, prefix: ['-3'] } : { executable, prefix: [] };
+      return executable === 'py' ? { executable, prefix: ['-3'], source: 'external' } : { executable, prefix: [], source: 'external' };
     } catch {}
   }
   throw new Error('未检测到可用 Python。请在“设置 → 数据分析环境”填写 Python 3.10+ 路径。');
@@ -47,6 +55,7 @@ class ToolRegistry {
     saveToolRun = () => {},
     findPython = findPythonExecutable,
     executeProcess = runProcess,
+    requestModel = null,
   }) {
     this.userDataPath = userDataPath;
     this.scriptPath = scriptPath;
@@ -55,6 +64,7 @@ class ToolRegistry {
     this.saveToolRun = saveToolRun;
     this.findPython = findPython;
     this.executeProcess = executeProcess;
+    this.requestModel = requestModel;
     this.tools = new Map();
     this.registerBuiltIns();
   }
@@ -68,10 +78,21 @@ class ToolRegistry {
     this.register({
       name: 'data_analysis',
       buildConfig: (plan, attachments) => {
-        const attachment = attachments.find((item) => item.name === plan.dataFile && ['.csv', '.xlsx'].includes(String(item.extension || '').toLowerCase()));
-        const source = this.resolveAttachment(attachment);
-        if (!source) throw new Error('数据工具未找到指定 CSV/XLSX 文件');
-        return { tool: 'data_analysis', source, sourceFingerprint: fileFingerprint(source), chartType: plan.chartType || 'auto', x: plan.x || '', y: plan.y || '', title: plan.title || '' };
+        const dataFile = plan.dataFile ? String(plan.dataFile) : '';
+        let source = null;
+        let sourceFingerprint = '';
+        if (dataFile) {
+          const attachment = attachments.find((item) => item.name === dataFile && ['.csv', '.xlsx'].includes(String(item.extension || '').toLowerCase()));
+          source = attachment ? this.resolveAttachment(attachment) : null;
+          if (source) sourceFingerprint = fileFingerprint(source);
+        }
+        return {
+          tool: 'data_analysis',
+          request: plan.request || '',
+          dataFile,
+          source,
+          sourceFingerprint,
+        };
       },
     });
     this.register({
@@ -101,19 +122,36 @@ class ToolRegistry {
     fs.mkdirSync(outputDir, { recursive: true });
     const configPath = path.join(outputDir, 'tool-config.json');
     fs.writeFileSync(configPath, JSON.stringify(config), 'utf8');
+    let result;
     try {
-      const python = await this.findPython(this.loadSettings());
-      const stdout = await this.executeProcess(python.executable, [...python.prefix, this.scriptPath, '--config', configPath, '--output-dir', outputDir]);
-      const result = JSON.parse(stdout.trim());
-      if (result.error) throw new Error(result.error);
-      result.files = (result.files || []).map((file) => path.resolve(file));
-      fs.writeFileSync(resultPath, JSON.stringify(result), 'utf8');
-      this.saveToolRun({ id: crypto.randomUUID(), agentRunId, cacheKey, toolName: plan.name, status: 'completed', createdAt: startedAt, result });
-      return { ...result, cacheHit: false };
+      if (plan.name === 'data_analysis') {
+        result = await runDataAnalysis({
+          plan: { ...plan, ...config },
+          request: plan.request,
+          attachments,
+          requestModel: this.requestModel,
+          findPython: this.findPython,
+          executeProcess: this.executeProcess,
+          resolveAttachment: this.resolveAttachment,
+          loadSettings: this.loadSettings,
+          userDataPath: this.userDataPath,
+          projectId,
+        });
+      } else {
+        const python = await this.findPython(this.loadSettings());
+        const stdout = await this.executeProcess(python.executable, [...python.prefix, this.scriptPath, '--config', configPath, '--output-dir', outputDir]);
+        const parsed = JSON.parse(stdout.trim());
+        if (parsed.error) throw new Error(parsed.error);
+        parsed.files = (parsed.files || []).map((file) => path.resolve(file));
+        result = parsed;
+      }
     } catch (error) {
       this.saveToolRun({ id: crypto.randomUUID(), agentRunId, cacheKey, toolName: plan.name, status: 'failed', createdAt: startedAt, error: error.message });
       return { error: error.message };
     }
+    fs.writeFileSync(resultPath, JSON.stringify(result), 'utf8');
+    this.saveToolRun({ id: crypto.randomUUID(), agentRunId, cacheKey, toolName: plan.name, status: result.error ? 'completed-with-error' : 'completed', createdAt: startedAt, result });
+    return { ...result, cacheHit: false };
   }
 }
 

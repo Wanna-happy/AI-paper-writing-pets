@@ -9,6 +9,14 @@ const expectedSkillIds = [
   'conclusion-writing',
   'data-analysis',
   'data-visualization',
+  'empirical-analysis-plan',
+  'empirical-causal-designs',
+  'empirical-inference',
+  'empirical-linear-models',
+  'empirical-measurement',
+  'empirical-panel-iv',
+  'empirical-prediction',
+  'empirical-result-handoff',
   'empirical-writing',
   'introduction-writing',
   'journal-submission',
@@ -45,11 +53,13 @@ for (const skillId of expectedSkillIds) {
   assert.strictEqual(frontmatter.name, skillId, `${skillId} 的 name 必须与目录名一致`);
   assert(frontmatter.description, `${skillId} 的 description 不能为空`);
   const body = source.replace(/^---[\s\S]*?---\s*/, '');
-  assert(body.length >= 1200, `${skillId} 的执行规程过短`);
-  assert((body.match(/^## /gm) || []).length >= 5, `${skillId} 缺少完整的执行阶段与质量门槛`);
+  const methodSkill = skillId.startsWith('empirical-') && skillId !== 'empirical-writing';
+  assert(body.length >= (methodSkill ? 200 : 1200), `${skillId} 的执行规程过短`);
+  if (!methodSkill) assert((body.match(/^## /gm) || []).length >= 5, `${skillId} 缺少完整的执行阶段与质量门槛`);
 
   const runtimePath = path.join(skillFolder, 'runtime.json');
-  const config = JSON.parse(fs.readFileSync(runtimePath, 'utf8'));
+  const config = fs.existsSync(runtimePath) ? JSON.parse(fs.readFileSync(runtimePath, 'utf8')) : { references: [] };
+  if (methodSkill && skillId !== 'empirical-result-handoff') assert(config.references.length, '方法Skill需有具体API与条件参考');
   assert(Array.isArray(config.references), `${skillId} runtime.json 缺少 references`);
   for (const definition of config.references) {
     const reference = runtime.readReference(runtime.skills.get(skillId), definition);

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="Microsoft YaHei, Arial, sans-serif">
+  <rect width="960" height="600" fill="#f7f8fa"/>
+  <!-- 顶栏 -->
+  <rect x="0" y="0" width="960" height="48" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="20" y="31" font-size="17" font-weight="bold" fill="#18344d">AI 论文宠物</text>
+  <rect x="780" y="10" width="80" height="28" rx="6" fill="#eef5fb" stroke="#3f6f99"/>
+  <text x="800" y="29" font-size="13" fill="#3f6f99">设置 ☼</text>
+  <rect x="870" y="10" width="70" height="28" rx="14" fill="#fff3e0" stroke="#e0a96d"/>
+  <text x="888" y="29" font-size="13" fill="#9a6b2f">宠物 🐾</text>
+
+  <!-- 左侧 资料库 -->
+  <rect x="0" y="48" width="240" height="512" fill="#ffffff" stroke="#e3e6eb"/>
+  <text x="16" y="76" font-size="14" font-weight="bold" fill="#18344d">资料库</text>
+  <rect x="16" y="88" width="208" height="26" rx="5" fill="#4e79a7" />
+  <text x="28" y="106" font-size="12" fill="#ffffff">＋ 上传并解析</text>
+  <rect x="16" y="124" width="208" height="30" rx="5" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="26" y="144" font-size="12" fill="#333">📄 文献A.pdf · 已解析</text>
+  <rect x="16" y="160" width="208" height="30" rx="5" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="26" y="180" font-size="12" fill="#333">📄 文献B.pdf · 已解析</text>
+  <rect x="16" y="196" width="208" height="30" rx="5" fill="#f2f5f9" stroke="#d7dde5"/>
+  <text x="26" y="216" font-size="12" fill="#333">📊 survey.csv · 已解析</text>
+  <text x="16" y="262" font-size="11" fill="#8a93a0">已建索引 312 分块 · 可检索</text>
+
+  <!-- 中间 对话/草稿 -->
+  <rect x="240" y="48" width="480" height="512" fill="#fbfcfd" stroke="#e3e6eb"/>
+  <rect x="256" y="64" width="64" height="26" rx="5" fill="#eef5fb" stroke="#3f6f99"/>
+  <text x="270" y="82" font-size="12" fill="#3f6f99">对话</text>
+  <rect x="328" y="64" width="64" height="26" rx="5" fill="#ffffff" stroke="#d7dde5"/>
+  <text x="342" y="82" font-size="12" fill="#555">草稿</text>
+  <rect x="256" y="100" width="440" height="40" rx="8" fill="#eef5fb"/>
+  <text x="270" y="125" font-size="12" fill="#333">我：写第二章文献综述，围绕研究方法</text>
+  <rect x="256" y="148" width="440" height="120" rx="8" fill="#ffffff" stroke="#d7dde5"/>
+  <text x="270" y="172" font-size="12" fill="#18344d">宠物：已召回 8 段资料，正在按研究分支组织…</text>
+  <text x="270" y="196" font-size="11" fill="#555">· 分支一（测量方法）代表文献 A、C</text>
+  <text x="270" y="216" font-size="11" fill="#555">· 分支二（影响因素）代表文献 B、D</text>
+  <text x="270" y="248" font-size="11" fill="#c0392b">⚠ 生成中：无证据不编实证</text>
+  <rect x="256" y="540" width="440" height="14" fill="#fbfcfd"/>
+  <text x="256" y="552" font-size="11" fill="#8a93a0">模型 DeepSeek · 本地优先 · 数据不出域</text>
+
+  <!-- 右侧 宠物浮窗 -->
+  <rect x="720" y="48" width="240" height="512" fill="#ffffff" stroke="#e3e6eb"/>
+  <rect x="740" y="80" width="200" height="120" rx="12" fill="#fff3e0" stroke="#e0a96d"/>
+  <text x="756" y="110" font-size="13" fill="#9a6b2f">🐾 宠物</text>
+  <text x="756" y="138" font-size="12" fill="#333">主人，我写完啦！</text>
+  <text x="756" y="160" font-size="11" fill="#8a93a0">快看看，也夸夸我吧～</text>
+  <rect x="740" y="220" width="200" height="1" fill="#e3e6eb"/>
+  <text x="740" y="248" font-size="12" fill="#18344d">本次证据映射</text>
+  <text x="740" y="272" font-size="11" fill="#555">E1 → 文献A 第 3 页</text>
+  <text x="740" y="292" font-size="11" fill="#555">E2 → 文献B 第 5 页</text>
+  <text x="740" y="320" font-size="11" fill="#8a93a0">可点击跳转资料库</text>
+
+  <text x="20" y="590" font-size="10" fill="#aab2bd">线框图（占位）：以线上安装包真实界面为准，后续替换截图</text>
+</svg>
