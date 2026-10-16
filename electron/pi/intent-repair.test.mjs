@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { createModels, fauxProvider, fauxAssistantMessage as response } from '@earendil-works/pi-ai';
+import { recognizeIntent } from './intent.mjs';
+import { makePlanningTools } from './agent-tools.mjs';
+const faux = fauxProvider({ tokensPerSecond: 100000 }); const models = createModels(); models.setProvider(faux.provider);
+const layer = { models, getModel: () => faux.getModel() };
+faux.setResponses([response('malformed'), ctx => { assert(JSON.stringify(ctx).includes('不是用户需求缺失')); return response(JSON.stringify({ branch: 'analysis', needsClarification: false, questions: [], goal: '承接已有分析' })); }]);
+const intent = await recognizeIntent({ layer, userPrompt: '继续', projectContext: '已清洗数据，等待提交分析方案' });
+assert.equal(intent.needsClarification, false); assert.equal(intent.diagnostics[0].code, 'INTENT_JSON_INVALID');
+faux.setResponses([response('{}'), response('invalid')]);
+await assert.rejects(recognizeIntent({ layer, userPrompt: '继续' }), error => error.code === 'INTENT_FORMAT_INVALID' && error.diagnostics.length === 2);
+let proposal;
+const tool = makePlanningTools({ submitAnalysisPlan: async input => { proposal = input; return { status: 'pending-confirmation' }; } })[0];
+assert(!tool.parameters.properties.steps.items.required.includes('outputs'));
+await tool.execute('call', { researchQuestion: '问题', objective: 'association', dataFile: 'f', dataDescription: '数据', missingDataPolicy: '无', interpretationLimits: '关联', steps: [{ methodId: 'ols', label: '回归', purpose: '关联', specification: 'y~x' }] });
+assert(proposal.steps.length === 1);
+console.log('Intent format auto repair; repeated format failure never asks a generic research question; missing outputs accepted');

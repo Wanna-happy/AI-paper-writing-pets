@@ -1,9 +1,0 @@
-{
-  "references": [
-    { "path": "../_shared/academic-writing/references/draft-continuation.md", "label": "既有草稿续写与修订", "maxCharacters": 8000 },
-    { "path": "../_shared/academic-writing/chapters/ch01-form-logic.md", "label": "结构与形式逻辑", "maxCharacters": 5000 },
-    { "path": "../_shared/scipilot/de_ai_humanize.md", "label": "去模板化与自然学术表达", "maxCharacters": 9000 },
-    { "path": "../_shared/scipilot/sci_writing_principles.md", "label": "句段层面写作技法", "maxCharacters": 9000 },
-    { "path": "../_shared/scholar-forge/writing-quality.md", "label": "表达质量审计", "maxCharacters": 4000 }
-  ]
-}

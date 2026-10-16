@@ -14,7 +14,7 @@ VERSION = '3.14.8'
 URL = f'https://www.python.org/ftp/python/{VERSION}/python-{VERSION}-embed-amd64.zip'
 # Published on https://www.python.org/downloads/release/python-3148/
 SHA256 = 'a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310'
-PACKAGES = ['numpy', 'pandas', 'scipy', 'matplotlib', 'openpyxl', 'statsmodels', 'scikit-learn', 'linearmodels', 'lifelines']
+PACKAGES = ['numpy', 'pandas', 'scipy', 'matplotlib', 'openpyxl', 'statsmodels', 'scikit-learn', 'linearmodels', 'lifelines', 'dtaidistance', 'pip==26.2.1']
 LOCK = ROOT / 'assets/python/runtime-lock.json'
 
 def extract(archive, destination, wheel=False):
@@ -49,7 +49,7 @@ def main():
     locked_names = {normalize(item['name']) for item in lock['packages']} if lock else set()
     requirements = [f"{item['name']}=={item['version']}" for item in lock['packages']] if lock else PACKAGES
     if lock and extend:
-        requirements += [name for name in PACKAGES if normalize(name) not in locked_names]
+        requirements += [name for name in PACKAGES if normalize(name.split('==')[0]) not in locked_names]
     subprocess.run([sys.executable, '-m', 'pip', 'download', '--index-url', 'https://pypi.org/simple', '--only-binary=:all:', '--implementation', 'cp', '--python-version', '3.14', '--abi', 'cp314', '--abi', 'abi3', '--abi', 'none', '--platform', 'win_amd64', '--dest', str(wheels), *requirements], check=True)
     TARGET.mkdir(parents=True, exist_ok=True)
     extract(archive, TARGET)
@@ -70,13 +70,13 @@ def main():
         if locked and digest != locked['sha256']:
             raise RuntimeError('Locked wheel checksum mismatch')
         extract(wheel, TARGET / 'Lib/site-packages', wheel=True)
-        packages.append({'name': name, 'version': version, 'wheel': wheel.name, 'sha256': digest, 'url': artifact['url']})
+        packages.append({'name': locked['name'] if locked else name, 'version': version, 'wheel': wheel.name, 'sha256': digest, 'url': artifact['url']})
     (TARGET / 'python314._pth').write_text('python314.zip\n.\nLib/site-packages\nimport site\n', encoding='utf8')
     manifest = json.dumps({'python': VERSION, 'source': URL, 'sha256': SHA256, 'packages': packages}, indent=2)
     (TARGET / 'runtime-manifest.json').write_text(manifest, encoding='utf8')
     if not lock or extend:
         LOCK.write_text(manifest, encoding='utf8')
-    probe = subprocess.run([str(TARGET / 'python.exe'), '-I', '-c', 'import sys,numpy,pandas,scipy,matplotlib,openpyxl,statsmodels,sklearn,linearmodels,lifelines; print(sys.version.split()[0]); print("BUNDLED_ANALYSIS_IMPORTS_OK")'], check=True, capture_output=True, text=True)
+    probe = subprocess.run([str(TARGET / 'python.exe'), '-I', '-c', 'import sys,numpy,pandas,scipy,matplotlib,openpyxl,statsmodels,sklearn,linearmodels,lifelines,pip; from dtaidistance import dtw; print(sys.version.split()[0]); print("BUNDLED_ANALYSIS_IMPORTS_OK")'], check=True, capture_output=True, text=True)
     print(probe.stdout)
 
 if __name__ == '__main__':

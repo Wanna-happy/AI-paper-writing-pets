@@ -9,6 +9,8 @@
 // 动态引入即可，无需把整个 electron/ 改成 ESM。
 
 import agentApiConfig from '../agent-api-config.js';
+import contextPolicy from '../agent/context-policy.js';
+import transport from '../providers/api-transport.js';
 import { createModels, createProvider } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy';
@@ -54,6 +56,7 @@ export function createModelLayer(settings = {}) {
   const models = createModels();
   const mappings = {};
   for (const [scenario, config] of Object.entries(configs)) {
+    if (config.provider === 'custom') throw new Error('本期已停用自定义中转站接口，请在 AI 配置选择受支持的服务商。');
     const anthropic = config.provider === 'anthropic';
     const base = url => anthropic ? agentApiConfig.validateApiUrl(url).replace(/\/v1(?:\/messages)?$/, '') : normalizeBaseUrl(url);
     const providerId = config.enabled ? 'agent-' + scenario : config.provider;
@@ -67,6 +70,7 @@ export function createModelLayer(settings = {}) {
       models: [...new Map(providerModels.map(model => [model.id, model])).values()], api: anthropic ? anthropicMessagesApi() : openAICompletionsApi() }));
   }
   return {
+    fetch: transport.apiFetch,
     models, scenarios: Object.fromEntries(Object.entries(configs).map(([scenario, config]) => [scenario, config.model])),
     defaultModel: configs.writing.model,
     scenarioModel(scenario) { return (mappings[scenario] || mappings.writing).model; },
@@ -116,7 +120,12 @@ function contentToString(content) {
 function requireComplete(final, signal) {
   signal?.throwIfAborted();
   if (final?.stopReason === 'aborted') throw new DOMException('模型响应已中断。', 'AbortError');
-  if (final?.stopReason === 'length') throw new Error('模型响应达到长度上限，未完成本次请求。请缩小任务范围后重试。');
+  if (final?.stopReason === 'length') {
+    const error = new Error('模型本次输出达到长度上限，尚未完成。');
+    error.code = 'MODEL_OUTPUT_TRUNCATED';
+    error.partialContent = contentToString(final?.content);
+    throw error;
+  }
   if (final?.stopReason !== 'stop') throw new Error(`模型响应未正常完成。${final?.errorMessage || ''}`);
 }
 
@@ -124,10 +133,10 @@ function requireComplete(final, signal) {
 export async function requestModel(layer, { scenario = 'writing', messages = [], options = {}, onDelta = null, signal = null, apiKey = '' } = {}) {
   const model = layer.getModel(scenario);
   const { systemPrompt, piMessages } = toPiMessages(messages);
-  const context = { systemPrompt, messages: piMessages, tools: [] };
+  const context = contextPolicy.boundTranscript({ systemPrompt, messages: piMessages, tools: [] }, model);
   apiKey = layer.getApiKey ? layer.getApiKey(scenario) : apiKey;
   if (layer.getApiKey && !apiKey) throw new Error(`请配置 ${scenario} Agent 的 API Key。`);
-  const callOptions = { ...options, apiKey, signal };
+  const callOptions = { fetch: layer.fetch, ...options, apiKey, signal };
 
   if (onDelta) {
     const stream = layer.models.stream(model, context, callOptions);

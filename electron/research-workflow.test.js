@@ -31,6 +31,10 @@ const workflow = buildResearchWorkflow(
 assert.strictEqual(workflow.sectionId, 'literature-review');
 assert.strictEqual(workflow.writingModeId, 'management-case');
 assert(workflow.queries.length >= 3);
+const external = require('./skills/research-adapter');
+assert.strictEqual(sectionFromSkillIds([external.CORE_SKILL_ID, external.LEGACY_IDS['literature-review']]).id, 'literature-review');
+assert.strictEqual(sectionFromSkillIds([external.CORE_SKILL_ID, external.WRITING_SKILL_ID]).id, 'results');
+assert.strictEqual(buildResearchWorkflow({}, '撰写结论', [external.CORE_SKILL_ID]).sectionId, 'conclusion');
 
 assert.deepStrictEqual(auditDraft('一个有证据的判断。<sup data-footnote="1">1</sup>', 2), []);
 assert(auditDraft('首次完全证明。<sup data-footnote="3">3</sup>', 2).some((item) => item.includes('不存在')));

@@ -1,6 +1,0 @@
-{
-  "references": [
-    { "path": "../_shared/academic-writing/references/visualization.md", "label": "论文表图规范", "maxCharacters": 9000 },
-    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Results（结果）", "label": "图表与结果正文分工", "maxCharacters": 5000 }
-  ]
-}

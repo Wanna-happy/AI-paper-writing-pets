@@ -1,7 +1,0 @@
-{
-  "references": [
-    { "path": "../_shared/academic-writing/references/theoretical-foundation.md", "label": "理论基础与分析框架", "maxCharacters": 9000 },
-    { "path": "../_shared/academic-writing/references/argument-design.md", "label": "研究问题与论证设计", "maxCharacters": 6000 },
-    { "path": "../_shared/academic-writing/chapters/ch04-lit-review.md", "label": "理论脉络与文献基础", "maxCharacters": 5000 }
-  ]
-}

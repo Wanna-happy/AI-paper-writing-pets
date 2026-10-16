@@ -44,6 +44,11 @@ Module._load = function load(request, parent, isMain) {
 async function run() {
 try {
   const store = require('./workspace-store');
+  store.updateProject('project-1', { clarifications: { c: { id: 'first', status: 'answered', questions: [{ id: 'q', question: '年份范围？' }], answers: [{ id: 'q', answer: '2000—2021' }] } } });
+  store.updateProject('project-1', { clarifications: { c: { id: 'second', status: 'pending', questions: [{ id: 'q2', question: '聚类变量？' }] } } });
+  const remembered = store.loadWorkspace().projects.find(item => item.id === 'project-1').confirmedDecisions.c;
+  assert.equal(remembered[0].answer, '2000—2021', '替换问题卡不能丢失已经确认的决策');
+
   store.setApiKey('session-a', 'session', 'agent-a');
   store.setApiKey('session-b', 'session', 'agent-b');
   assert.equal(store.getApiKey('session', 'agent-a'), 'session-a');
@@ -83,8 +88,11 @@ try {
   assert.equal(reviewDraft.lengthReview.actual, 4);
   assert.equal(reviewDraft.deliveryStatus, 'needs-revision');
   const edited = store.saveDraft(created.id, { ...reviewDraft, content: '<p>正文</p>' });
+  assert.equal(edited.history[0].content,'<p>正文过长</p>');
+  assert.equal(edited.history.at(-1).content,'<p>正文</p>');
+  assert.throws(()=>store.saveDraft(created.id,{...reviewDraft,content:'旧窗口覆盖',expectedContent:reviewDraft.content}),/其他操作修改/);
   assert.equal(edited.lengthReview.passed, true);
-  assert.equal(edited.deliveryStatus, 'ready');
+  assert.equal(edited.deliveryStatus, 'needs-review', '篇幅达标不能代替引用核验');
   assert(!edited.checks.some(item => item.startsWith('篇幅未达标')));
   const empiricalPlans = { [createdProject.activeConversationId]: { id: 'synthetic-plan', revision: 2, status: 'results-review', results: [{ sampleSize: 128 }], history: [{ revision: 1 }] } };
   store.updateProject(created.id, { empiricalPlans });

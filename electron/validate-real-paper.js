@@ -101,7 +101,7 @@ app.whenReady().then(async () => {
     if (preflight.hits.length < 3) throw new Error('retrieval-preflight-failed');
     const engine = new AgentOrchestrator({
       workspaceStore: store, ragStore, providerRegistry: new ProviderRegistry(DEFAULT_PROVIDERS), toolRegistry: {},
-      skillRuntime: new SkillRuntime(path.join(workspace, 'assets/skills')), loadSettings: () => settings,
+      skillRuntime: new SkillRuntime(path.join(workspace, 'assets/research-skills')), loadSettings: () => settings,
       buildConversationFileContext: () => '', postProcessContent: postProcessAgentContent,
       emitStream: () => {}, emitStatus: (_, payload) => { if (payload.stage === 'task-start') progress(`agent-${payload.role}`); },
       react: () => {}, playCompletion: () => {},

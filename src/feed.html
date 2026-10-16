@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; frame-src 'self'" />
     <title>AI 论文宠物</title>
     <link rel="stylesheet" href="./styles/feed.css" />
+    <link rel="stylesheet" href="./styles/chat-markdown.css" />
     <link rel="stylesheet" href="../node_modules/@vscode/codicons/dist/codicon.css" />
   </head>
   <body>
@@ -87,8 +88,10 @@
 
             <div class="composer-dock">
               <section id="empirical-plan-card" class="empirical-plan-card" aria-label="实证方案确认" hidden></section>
+              <section id="clarification-card" class="clarification-card" aria-label="问题确认卡" hidden></section>
               <section id="task-progress-card" class="task-progress-card" aria-label="本轮任务进度" hidden></section>
               <section class="composer" aria-label="论文写作输入">
+                <div id="conversation-file-list" class="conversation-file-list" aria-label="本轮附件" hidden></div>
                 <textarea id="task-input" rows="1" aria-label="告诉小柴你的论文任务" placeholder="告诉小柴你想研究或写作的内容"></textarea>
                 <div class="composer-footer">
                   <div class="composer-tools">
@@ -98,16 +101,16 @@
                   <button class="send-button" id="send-button" type="button" disabled aria-label="发送任务">↑</button>
                 </div>
               </section>
-              <div id="conversation-file-list" class="conversation-file-list" hidden></div>
               <p class="composer-disclaimer">AI工具仅作学习帮手，生成内容可能有误，请核验事实与引用。</p>
             </div>
             <aside id="empirical-preview" class="empirical-preview" aria-label="文件预览" hidden>
+              <div id="preview-resizer" class="preview-resizer" role="separator" aria-label="调整对话与预览的宽度" aria-orientation="vertical" tabindex="0"></div>
               <header>
                 <div id="empirical-preview-tabs" class="empirical-preview-tabs" role="tablist" aria-label="已打开文件"></div>
                 <details class="preview-file-picker"><summary aria-label="打开另一个结果文件" title="打开另一个结果文件"><span class="codicon codicon-add" aria-hidden="true"></span></summary><div id="preview-file-list" class="preview-menu"></div></details>
                 <div class="preview-window-actions"><button id="preview-expand" type="button" aria-label="展开预览" title="展开预览" aria-pressed="false"><span class="codicon codicon-screen-full" aria-hidden="true"></span></button><button id="empirical-preview-close" type="button" aria-label="关闭文件预览" title="关闭文件预览"><span class="codicon codicon-close" aria-hidden="true"></span></button></div>
               </header>
-              <div class="preview-toolbar"><div class="preview-breadcrumb"><span id="preview-project"></span><span class="codicon codicon-chevron-right" aria-hidden="true"></span><strong id="empirical-preview-title">文件预览</strong></div><div class="preview-file-actions"><button id="preview-copy" type="button" aria-label="复制文件内容" title="复制文件内容"><span class="codicon codicon-copy" aria-hidden="true"></span></button><details id="preview-open-menu"><summary><span class="codicon codicon-go-to-file" aria-hidden="true"></span>打开<span class="codicon codicon-chevron-down" aria-hidden="true"></span></summary><div class="preview-menu"><button id="preview-save" type="button">另存为文件…</button><button id="preview-reveal" type="button">另存并在文件夹中显示…</button></div></details></div></div>
+              <div class="preview-toolbar"><div class="preview-breadcrumb"><span id="preview-project"></span><span class="codicon codicon-chevron-right" aria-hidden="true"></span><strong id="empirical-preview-title">文件预览</strong></div><div class="preview-file-actions"><div id="preview-document-controls"></div><button id="preview-copy" type="button" aria-label="复制文件内容" title="复制文件内容"><span class="codicon codicon-copy" aria-hidden="true"></span></button><details id="preview-open-menu"><summary><span class="codicon codicon-go-to-file" aria-hidden="true"></span>打开<span class="codicon codicon-chevron-down" aria-hidden="true"></span></summary><div class="preview-menu"><button id="preview-save" type="button">另存为文件…</button><button id="preview-reveal" type="button">另存并在文件夹中显示…</button></div></details></div></div>
               <div id="empirical-preview-content" class="empirical-preview-content"></div>
             </aside>
           </section>
@@ -166,11 +169,11 @@
                 <div class="settings-heading"><h1>AI 配置</h1><p>接入你自己的大模型服务商。所有 Agent 默认共用这份接入配置，密钥加密保存在本机。</p></div>
                 <div class="settings-card form-card">
                   <div class="api-provider-card"><div class="api-provider-logo" id="api-provider-logo">D</div><div><strong id="api-provider-name">DeepSeek</strong><p id="api-provider-description">自配置模型服务商 · 接口地址可自定义</p></div><span id="api-connection-badge" class="status-pill">未连接</span></div>
-                  <label>服务商<select id="api-provider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI / GPT</option><option value="anthropic">Claude / Anthropic</option><option value="hunyuan">腾讯混元 / HY</option><option value="qwen">通义千问</option><option value="zhipu">智谱 GLM</option><option value="moonshot">Moonshot / Kimi</option><option value="openrouter">OpenRouter</option><option value="custom">自定义 OpenAI 兼容接口</option></select></label>
-                  <label>模型<input id="api-model" type="text" autocomplete="off" placeholder="填写服务商提供的模型名称" /></label>
+                  <label>服务商<select id="api-provider"><option value="" disabled>请选择服务商</option><option value="deepseek">DeepSeek</option><option value="openai">OpenAI / GPT</option><option value="anthropic">Claude / Anthropic</option><option value="hunyuan">腾讯混元 / HY</option><option value="qwen">通义千问</option><option value="zhipu">智谱 GLM</option><option value="moonshot">Moonshot / Kimi</option><option value="openrouter">OpenRouter</option></select></label>
+                  <label>模型<input id="api-model" type="text" autocomplete="off" placeholder="填写中转站提供的真实模型 ID" /></label>
                   <label>接口地址（base_url）<input id="api-base-url" type="url" placeholder="https://api.deepseek.com" spellcheck="false" /></label>
                   <label><span id="api-key-label">DeepSeek API Key</span><span class="secret-field"><input id="api-key" type="password" autocomplete="off" placeholder="填写 DeepSeek 的 API Key" /><button id="api-key-toggle" type="button" aria-label="显示 API 密钥" title="显示 API 密钥"><span class="eye-icon" aria-hidden="true"></span></button></span></label>
-                  <p class="api-help">密钥使用系统安全存储加密保存，不会写入论文项目、导出文件或普通日志。共用配置默认使用 DeepSeek；下方各 Agent 可独立选择服务商、模型和密钥。远程接口须使用 HTTPS。</p>
+                  <p class="api-help">密钥使用系统安全存储加密保存，不会写入论文项目、导出文件或普通日志。共用配置默认使用 DeepSeek；下方各 Agent 可独立选择服务商、模型和密钥。远程接口须使用 HTTPS。 执行任务时，当前要求、必要历史及按任务选择的资料片段会发送至所配置的模型服务商；普通问答不会自动发送整批项目资料。</p>
                   <p id="api-status" class="setting-status"></p>
                   <div class="api-actions"><button id="api-test-button" class="secondary-button" type="button">测试当前密钥</button><button id="api-save-test-button" class="primary-button" type="button">保存并测试</button></div>
                 </div>
@@ -198,11 +201,18 @@
       </div>
     </main>
 
-    <dialog id="project-dialog"><form method="dialog" class="modal-card" id="project-form"><div class="modal-heading"><div><p class="eyebrow">论文项目</p><h2 id="project-dialog-title">新建项目</h2></div><button value="cancel" type="submit">×</button></div><label>项目名称<input id="project-title" required maxlength="80" /></label><div class="form-grid"><label>论文类型<select id="project-type"><option>课程论文</option><option>开题报告</option><option selected>硕士学位论文</option><option>博士学位论文</option><option>期刊论文</option><option>研究报告</option></select></label><fieldset class="domain-picker" id="project-domains"><legend>学科领域（可多选）</legend><div class="domain-options"><label><input type="checkbox" name="project-domain" value="哲学" />哲学</label><label><input type="checkbox" name="project-domain" value="经济学" />经济学</label><label><input type="checkbox" name="project-domain" value="法学" />法学</label><label><input type="checkbox" name="project-domain" value="教育学" />教育学</label><label><input type="checkbox" name="project-domain" value="文学" />文学</label><label><input type="checkbox" name="project-domain" value="历史学" />历史学</label><label><input type="checkbox" name="project-domain" value="理学" />理学</label><label><input type="checkbox" name="project-domain" value="工学" />工学</label><label><input type="checkbox" name="project-domain" value="农学" />农学</label><label><input type="checkbox" name="project-domain" value="医学" />医学</label><label><input type="checkbox" name="project-domain" value="管理学" />管理学</label><label><input type="checkbox" name="project-domain" value="艺术学" />艺术学</label><label><input type="checkbox" name="project-domain" value="其他" />其他</label></div></fieldset><label>语言<select id="project-language"><option selected>中文</option><option>英文</option><option>中英双语</option></select></label><label>引用格式<select id="project-citation"><option selected>GB/T 7714</option><option>APA</option><option>MLA</option><option>Chicago</option></select></label></div><label>写作目标<textarea id="project-goal" placeholder="研究问题、方法、目标院校或期刊、预期成果等"></textarea></label><p class="project-field-help">学科领域用于选择科研工作流，可同时选择多个交叉方向；创建后仍可在项目设置中修改。</p><div class="modal-actions split-actions"><button class="danger-link" id="project-delete-button" value="cancel" type="button" hidden>删除项目</button><span></span><button value="cancel" type="submit">取消</button><button class="primary-button" value="default" type="submit">保存项目</button></div></form></dialog>
-    <dialog id="reminder-dialog"><form method="dialog" class="modal-card reminder-card"><div class="reminder-icon">学</div><h2>开始生成前，请先确认</h2><p>AI工具仅作学习帮手，请同学勤奋努力，掌握真知识。</p><small>生成结果仍需你核验事实、引用与格式。</small><div class="modal-actions"><button value="cancel" type="submit">返回检查</button><button class="primary-button" value="confirm" type="submit">我已知晓，开始生成</button></div></form></dialog>
-    <dialog id="confirm-dialog"><form method="dialog" class="modal-card compact-modal"><h2 id="confirm-title">确认操作</h2><p id="confirm-message"></p><div class="modal-actions"><button value="cancel" type="submit">取消</button><button class="danger-button" value="confirm" type="submit">确认删除</button></div></form></dialog>
+    <dialog id="project-dialog"><form method="dialog" class="modal-card" id="project-form"><div class="modal-heading"><div><p class="eyebrow">论文项目</p><h2 id="project-dialog-title">新建项目</h2></div><button value="cancel" type="submit" formnovalidate>×</button></div><label>项目名称<input id="project-title" required maxlength="80" /></label><div class="form-grid"><label>论文类型<select id="project-type"><option>课程论文</option><option>开题报告</option><option selected>硕士学位论文</option><option>博士学位论文</option><option>期刊论文</option><option>研究报告</option></select></label><fieldset class="domain-picker" id="project-domains"><legend>学科领域（可多选）</legend><div class="domain-options"><label><input type="checkbox" name="project-domain" value="哲学" />哲学</label><label><input type="checkbox" name="project-domain" value="经济学" />经济学</label><label><input type="checkbox" name="project-domain" value="法学" />法学</label><label><input type="checkbox" name="project-domain" value="教育学" />教育学</label><label><input type="checkbox" name="project-domain" value="文学" />文学</label><label><input type="checkbox" name="project-domain" value="历史学" />历史学</label><label><input type="checkbox" name="project-domain" value="理学" />理学</label><label><input type="checkbox" name="project-domain" value="工学" />工学</label><label><input type="checkbox" name="project-domain" value="农学" />农学</label><label><input type="checkbox" name="project-domain" value="医学" />医学</label><label><input type="checkbox" name="project-domain" value="管理学" />管理学</label><label><input type="checkbox" name="project-domain" value="艺术学" />艺术学</label><label><input type="checkbox" name="project-domain" value="其他" />其他</label></div></fieldset><label>语言<select id="project-language"><option selected>中文</option><option>英文</option><option>中英双语</option></select></label><label>引用格式<select id="project-citation"><option selected>GB/T 7714</option><option>APA</option><option>MLA</option><option>Chicago</option></select></label></div><label>写作目标<textarea id="project-goal" placeholder="研究问题、方法、目标院校或期刊、预期成果等"></textarea></label><p class="project-field-help">学科领域用于选择科研工作流，可同时选择多个交叉方向；创建后仍可在项目设置中修改。</p><div class="modal-actions split-actions"><button class="danger-link" id="project-delete-button" value="cancel" type="button" hidden>删除项目</button><span></span><button value="cancel" type="submit" formnovalidate>取消</button><button class="primary-button" value="default" type="submit">保存项目</button></div></form></dialog>
+    <dialog id="reminder-dialog"><form method="dialog" class="modal-card reminder-card"><div class="reminder-icon">学</div><h2>开始生成前，请先确认</h2><p>AI工具仅作学习帮手，请同学勤奋努力，掌握真知识。</p><small>生成结果仍需你核验事实、引用与格式。</small><div class="modal-actions"><button value="cancel" type="submit" formnovalidate>返回检查</button><button class="primary-button" value="confirm" type="submit">我已知晓，开始生成</button></div></form></dialog>
+    <dialog id="confirm-dialog"><form method="dialog" class="modal-card compact-modal"><h2 id="confirm-title">确认操作</h2><p id="confirm-message"></p><div class="modal-actions"><button value="cancel" type="submit" formnovalidate>取消</button><button class="danger-button" value="confirm" type="submit">确认删除</button></div></form></dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="./task-progress.js"></script>
+    <script src="./incremental-text.js"></script>
+    <script src="./vendor/marked.umd.js"></script>
+    <script src="./chat-markdown.js"></script>
     <script src="./feed.js"></script>
+    <script src="./text-diff.js"></script>
+    <script src="./writing-workbench.js"></script>
+    <script src="./project-experience.js"></script>
+    <script src="./reading-tools.js"></script>
   </body>
 </html>

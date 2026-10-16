@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const {versionDraft}=require('./draft-history');
+const original={id:'d',conversationId:'c',content:'原稿',evidence:[{evidenceId:'E1',text:'证据'}]};
+const edited=versionDraft(original,{...original,content:'修改稿',expectedContent:'原稿',history:[{content:'伪造历史'}]},'2026-10-16T01:00:00Z');
+assert.equal(edited.history.length,2);assert.equal(edited.history[0].content,'原稿');assert.equal(edited.history[1].content,'修改稿');assert.equal(edited.history[0].history,undefined);
+original.evidence[0].text='外部修改';assert.equal(edited.history[0].evidence[0].text,'证据');
+assert.throws(()=>versionDraft(edited,{...edited,content:'旧窗口稿',expectedContent:'原稿'}),/其他操作修改/);
+assert.throws(()=>versionDraft(edited,{...edited,conversationId:'other'}),/所属对话/);
+const restored=versionDraft(edited,{...edited,content:original.content,versionLabel:'恢复',expectedContent:'修改稿'});
+assert.equal(restored.history.length,3);assert.equal(restored.history[1].content,'修改稿');assert.notEqual(restored.revision,edited.revision);
+assert.equal(versionDraft(restored,{...restored}).history.length,3);
+console.log('draft history: immutable snapshots, conflict guard, restore and conversation scope passed');

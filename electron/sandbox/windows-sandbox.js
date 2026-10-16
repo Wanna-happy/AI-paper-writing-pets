@@ -5,24 +5,24 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 
 const BACKEND = 'windows-lpac-job';
-const RUNTIME_VERSION = 6;
+const RUNTIME_VERSION = 8;
 const REQUIRED = ['numpy', 'pandas', 'scipy', 'matplotlib', 'openpyxl'];
 const PACKAGES = [...REQUIRED, 'dateutil', 'pytz', 'tzdata', 'packaging', 'PIL', 'contourpy', 'cycler', 'fontTools', 'kiwisolver', 'pyparsing', 'et_xmlfile', 'six', 'mpl_toolkits',
-  'statsmodels', 'sklearn', 'linearmodels', 'lifelines', 'autograd', 'autograd_gamma', 'cloudpickle', 'formulaic', 'interface_meta', 'joblib', 'mypy_extensions', 'narwhals', 'patsy', 'pyhdfe', 'threadpoolctl', 'typing_extensions', 'wrapt'];
+  'statsmodels', 'sklearn', 'linearmodels', 'lifelines', 'dtaidistance', 'autograd', 'autograd_gamma', 'cloudpickle', 'formulaic', 'interface_meta', 'joblib', 'mypy_extensions', 'narwhals', 'patsy', 'pyhdfe', 'threadpoolctl', 'typing_extensions', 'wrapt'];
 const preparations = new Map();
 
 function helperPath() {
   return path.resolve(__dirname, '../../assets/sandbox/win32/paper-pet-sandbox.exe').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
 }
 
-function getSandboxStatus() {
+function getSandboxStatus(networkEnabled = false) {
   const supported = process.platform === 'win32' && process.arch === 'x64' && Number(os.release().split('.')[2]) >= 15063;
   const helperAvailable = fs.existsSync(helperPath());
   return {
     available: supported && helperAvailable,
     backend: BACKEND,
     supported, helperAvailable,
-    policy: { network: 'denied', capabilities: ['registryRead'], inputs: 'read-only-copy', runtime: 'read-execute-copy', output: 'per-run', processLimit: 1, memoryMb: 1024 },
+    policy: { network: networkEnabled === true ? 'internet-client' : 'denied', capabilities: networkEnabled === true ? ['registryRead', 'internetClient'] : ['registryRead'], inputs: 'read-only-copy', runtime: 'read-execute-copy', output: 'per-run', processLimit: 1, memoryMb: 1024 },
     error: !supported ? '数据分析要求 Windows 10 1703+/11 x64 的 LPAC 沙箱。' : !helperAvailable ? '缺少系统沙箱启动器，请重新安装应用或构建沙箱。' : null,
   };
 }
@@ -68,8 +68,8 @@ function listFiles(root, prefix = '') {
   return files;
 }
 
-async function prepareRuntime(python, cacheDir, signal) {
-  const key = `${python.executable}:${JSON.stringify(python.prefix || [])}:${cacheDir}`;
+async function prepareRuntime(python, cacheDir, signal, dependencyDir = null) {
+  const key = `${python.executable}:${JSON.stringify(python.prefix || [])}:${cacheDir}:${dependencyDir || ''}`;
   if (preparations.has(key)) return preparations.get(key);
   const pending = (async () => {
     signal?.throwIfAborted();
@@ -111,6 +111,19 @@ async function prepareRuntime(python, cacheDir, signal) {
       }
     }
     for (const folder of info.metadata || []) files.push(...listFiles(folder, path.join('Lib', 'site-packages', path.basename(folder))));
+    let extraPackages = [];
+    if (dependencyDir) {
+      const manifest = JSON.parse(fs.readFileSync(path.join(dependencyDir, 'manifest.json'), 'utf8'));
+      if (!Array.isArray(manifest.packages) || !manifest.packages.every(item => /^[A-Za-z0-9._-]+$/.test(item.name) && /^[A-Za-z0-9.!+_-]+$/.test(item.version))) throw new Error('项目依赖清单无效。');
+      extraPackages = manifest.packages.map(item => `${item.name}==${item.version}`);
+      const extraFiles = listFiles(path.join(dependencyDir, 'site-packages'), path.join('Lib', 'site-packages'));
+      const occupied = new Set(files.map(item => item.target.toLowerCase()));
+      for (const file of extraFiles) {
+        if (occupied.has(file.target.toLowerCase()) || /\.pth$/i.test(file.target)) throw new Error(`项目依赖与沙箱运行时冲突：${file.target}`);
+        occupied.add(file.target.toLowerCase());
+        files.push(file);
+      }
+    }
     const fingerprint = crypto.createHash('sha256').update(JSON.stringify({ version: RUNTIME_VERSION, python: info.version, files })).digest('hex').slice(0, 24);
     const runtime = path.join(cacheDir, fingerprint);
     const manifest = path.join(runtime, 'runtime.json');
@@ -125,7 +138,7 @@ async function prepareRuntime(python, cacheDir, signal) {
           fs.copyFileSync(file.source, destination);
         }
         if (!fs.existsSync(path.join(staging, 'python.exe'))) throw new Error('沙箱需要标准 Windows CPython 安装，当前解释器不受支持。');
-        fs.writeFileSync(path.join(staging, 'runtime.json'), JSON.stringify({ version: RUNTIME_VERSION, fingerprint, packages: Object.keys(info.packages), fileCount: files.length }));
+        fs.writeFileSync(path.join(staging, 'runtime.json'), JSON.stringify({ version: RUNTIME_VERSION, fingerprint, packages: Object.keys(info.packages), projectPackages: extraPackages, fileCount: files.length }));
         for (let attempt = 0; ; attempt++) {
           try { fs.renameSync(staging, runtime); break; } catch (error) {
             if (fs.existsSync(manifest)) break;
@@ -143,19 +156,20 @@ async function prepareRuntime(python, cacheDir, signal) {
   try { return await pending; } finally { preparations.delete(key); }
 }
 
-async function runSandbox({ python, scriptPath, dataFilePath, outputDir, timeoutMs = 60000, memoryMb = 1024, signal }) {
-  const status = getSandboxStatus();
+async function runSandbox({ python, scriptPath, dataFilePath, outputDir, dependencyDir = null, networkEnabled = false, timeoutMs = 60000, memoryMb = 1024, signal }) {
+  const allowNetwork = networkEnabled === true;
+  const status = getSandboxStatus(allowNetwork);
   if (!status.available) throw new Error(`${status.error} 为保护本机数据，已拒绝执行分析代码。`);
   signal?.throwIfAborted();
   const root = path.join(outputDir, 'sandbox');
   const input = path.join(root, 'input'), output = path.join(root, 'output'), control = path.join(root, 'control');
   for (const folder of [input, output, control, ...['charts', 'tmp', 'profile', 'mpl'].map(name => path.join(output, name))]) fs.mkdirSync(folder, { recursive: true });
-  const runtime = await prepareRuntime(python, path.join(path.dirname(path.dirname(outputDir)), '.sandbox-runtime'), signal);
+  const runtime = await prepareRuntime(python, path.join(path.dirname(outputDir), '.sandbox-runtime'), signal, dependencyDir);
   fs.copyFileSync(scriptPath, path.join(input, 'analysis_script.py'));
   const dataName = dataFilePath ? `data${path.extname(dataFilePath).toLowerCase()}` : '';
   if (dataName) fs.copyFileSync(dataFilePath, path.join(input, dataName));
   const config = path.join(control, 'config.json');
-  fs.writeFileSync(config, JSON.stringify({ runtime, input, output, control, dataName, timeoutMs, memoryMb }));
+  fs.writeFileSync(config, JSON.stringify({ runtime, input, output, control, dataName, timeoutMs, memoryMb, allowNetwork }));
   const cancel = () => fs.writeFileSync(path.join(control, 'cancel'), '1');
   signal?.addEventListener('abort', cancel, { once: true });
   if (signal?.aborted) cancel();
@@ -163,11 +177,20 @@ async function runSandbox({ python, scriptPath, dataFilePath, outputDir, timeout
   try {
     let stdout;
     try { stdout = await executeTrusted(helperPath(), [config], { timeout: Math.max(100, Math.min(timeoutMs, 600000)) + 30000 }); }
-    catch (error) { if (error.stdout?.trim().startsWith('{')) stdout = error.stdout; else throw new Error('Windows 系统沙箱启动或运行失败，分析已停止；不会切换到普通进程执行。'); }
+    catch (error) {
+      if (error.stdout?.trim().startsWith('{')) stdout = error.stdout;
+      else {
+        const detail = error.killed || error.signal === 'SIGTERM'
+          ? `沙箱启动器超过 ${Math.round((Math.max(100, Math.min(timeoutMs, 600000)) + 30000) / 1000)} 秒未返回结果`
+          : `沙箱启动器退出码 ${error.code ?? '未知'}${error.signal ? `，信号 ${error.signal}` : ''}`;
+        throw new Error(`Windows 系统沙箱启动或运行失败（${detail}），分析已停止；不会切换到普通进程执行。`);
+      }
+    }
     try { result = JSON.parse(stdout.trim()); } catch { throw new Error('系统沙箱返回无效结果，分析已停止。'); }
   } finally { signal?.removeEventListener('abort', cancel); }
   if (signal?.aborted || result.reason === 'canceled') throw new DOMException('分析已挂起', 'AbortError');
   if (result.error || !result.appContainer || result.backend !== BACKEND) throw new Error(result.error || '系统沙箱身份验证失败，已拒绝结果。');
+  if (Number(result.networkCapabilities) !== (allowNetwork ? 1 : 0)) throw new Error('系统沙箱联网权限与用户设置不符，已拒绝结果。');
   if (result.reason) {
     const error = new Error(result.reason === 'timeout' ? '沙箱分析超时，进程已终止。' : '沙箱输出超过限制，进程已终止。');
     error.stdout = String(result.stdout || '').slice(-1600);
@@ -183,7 +206,7 @@ async function runSandbox({ python, scriptPath, dataFilePath, outputDir, timeout
     if (stat.size > 12 * 1024 * 1024) throw new Error('单张图表超过 12 MB，已拒绝读取。');
     return file;
   });
-  return { stdout: result.stdout, charts, sandbox: { backend: BACKEND, appContainer: true, networkCapabilities: 0, capabilities: result.capabilities, processLimit: 1, memoryMb: result.memoryMb } };
+  return { stdout: result.stdout, charts, sandbox: { backend: BACKEND, appContainer: true, networkCapabilities: result.networkCapabilities, capabilities: result.capabilities, processLimit: 1, memoryMb: result.memoryMb } };
 }
 
 module.exports = { BACKEND, getSandboxStatus, runSandbox, prepareRuntime, helperPath };

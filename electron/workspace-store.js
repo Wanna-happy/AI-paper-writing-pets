@@ -50,8 +50,9 @@ function clone(value) {
 
 function getRepository() {
   if (!repository) {
-    repository = new SqliteWorkspaceRepository(getDatabasePath());
-    migrateLegacyWorkspace(repository);
+    const opened = new SqliteWorkspaceRepository(getDatabasePath());
+    try { migrateLegacyWorkspace(opened); repository = opened; }
+    catch (error) { opened.close(); throw error; }
   }
   return repository;
 }
@@ -67,7 +68,7 @@ function getOcrRuntime() {
 }
 
 function migrateLegacyWorkspace(targetRepository) {
-  if (!targetRepository.isEmpty() || !fs.existsSync(getStatePath())) return;
+  if (targetRepository.getMetadata('legacy_workspace_imported_at') || !targetRepository.isEmpty() || !fs.existsSync(getStatePath())) return;
   try {
     const legacy = JSON.parse(fs.readFileSync(getStatePath(), 'utf8'));
     for (const project of legacy.projects || []) {
@@ -80,6 +81,7 @@ function migrateLegacyWorkspace(targetRepository) {
     targetRepository.setMetadata('legacy_workspace_imported_at', new Date().toISOString());
   } catch (error) {
     targetRepository.setMetadata('legacy_workspace_import_error', error.message);
+    throw new Error('旧工作区迁移失败，已保留原文件并停止写入。', { cause: error });
   }
 }
 
@@ -165,8 +167,9 @@ function loadWorkspace() {
     if (migratedConversations) getRepository().saveWorkspace(state);
     workspaceCache.set('workspace', state);
     return clone(state);
-  } catch {
-    return clone(EMPTY_STATE);
+  } catch (cause) {
+    workspaceCache.clear();
+    throw new Error('工作区读取失败，已停止本次操作以保护原有项目。请重试或检查本地数据文件。', { cause });
   }
 }
 
@@ -176,7 +179,21 @@ function saveWorkspace(state) {
       if (document.text) writeDocumentCache(getLibraryPath(), project.id, document);
     }
   }
-  getRepository().saveWorkspace(state);
+  try { getRepository().saveWorkspace(state); }
+  catch (error) { workspaceCache.clear(); throw error; }
+  // A single latest recovery snapshot contains only the current workspace;
+  // deleted projects are not retained in a rotating history of backups.
+  const recovery = path.join(app.getPath('userData'), 'workspace-recovery.json');
+  try {
+    const temporary = `${recovery}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify(state), 'utf8');
+    fs.renameSync(temporary, recovery);
+    if (fs.existsSync(getStatePath())) {
+      const legacyTemporary = `${getStatePath()}.${process.pid}.tmp`;
+      fs.writeFileSync(legacyTemporary, JSON.stringify(state), 'utf8');
+      fs.renameSync(legacyTemporary, getStatePath());
+    }
+  } catch (error) { state.recoveryWarning = `本地恢复快照未更新：${error.message}`; }
   workspaceCache.set('workspace', clone(state));
   return state;
 }
@@ -215,10 +232,33 @@ function updateProject(projectId, partial) {
   if ('domains' in normalized || 'domain' in normalized) normalized.domains = normalizeDomains(normalized);
   if ('thesisProfile' in normalized) normalized.thesisProfile = normalizeThesisProfile(normalized.thesisProfile);
   delete normalized.domain;
+  if (normalized.clarifications) normalized.confirmedDecisions = require('./agent/decision-memory').rememberAnswers(project, normalized.clarifications);
+  if (normalized.empiricalPlans) {
+    normalized.confirmedAnalysisChoices = { ...(project.confirmedAnalysisChoices || {}) };
+    for (const [conversationId, plan] of Object.entries(normalized.empiricalPlans)) {
+      if (plan?.approvedAt) normalized.confirmedAnalysisChoices[conversationId] = { dataFile: plan.attachment,
+        dataSelection: plan.dataSelection, steps: plan.steps.map(step => ({ methodId: step.methodId, specification: step.specification })), revision: plan.revision, approvedAt: plan.approvedAt };
+    }
+  }
   Object.assign(project, normalized, { updatedAt: new Date().toISOString() });
   if ('thesisProfile' in normalized && project.type === '硕士学位论文') project.thesisControl = ensureThesisControl(project);
   saveWorkspace(state);
   return project;
+}
+
+function updateDocumentMetadata(projectId, documentId, partial) {
+  const state=loadWorkspace(), project=state.projects.find(item=>item.id===projectId);
+  const document=project?.documents.find(item=>item.id===documentId);
+  if(!document) throw new Error('资料不属于当前项目');
+  for(const key of ['author','year','note']) if(typeof partial[key]==='string') document[key]=partial[key].trim().slice(0,key==='note'?4000:200);
+  if(Array.isArray(partial.tags)) document.tags=[...new Set(partial.tags.filter(t=>typeof t==='string').map(t=>t.trim().slice(0,60)).filter(Boolean))].slice(0,30);
+  saveWorkspace(state);return document;
+}
+
+function addRestoredProject(project) {
+  const state=loadWorkspace();
+  if(state.projects.some(item=>item.id===project.id))throw new Error('恢复项目标识冲突');
+  state.projects.push(project);state.activeProjectId=project.id;saveWorkspace(state);return project;
 }
 
 function setActiveProject(projectId) {
@@ -255,6 +295,9 @@ function deleteConversation(projectId, conversationId) {
   const remaining = (project.conversations || []).filter((item) => item.id !== conversationId);
   if (!remaining.length) throw new Error('每个项目至少保留一个对话，不能删除最后一个。');
   project.conversations = remaining;
+  for (const field of ['clarifications', 'confirmedDecisions', 'confirmedAnalysisChoices', 'empiricalPlans', 'dataPreparations']) {
+    if (project[field]) delete project[field][conversationId];
+  }
   project.drafts = (project.drafts || []).filter((draft) => draft.conversationId !== conversationId);
   if (project.activeConversationId === conversationId || !remaining.some((item) => item.id === project.activeConversationId)) {
     project.activeConversationId = remaining[0].id;
@@ -278,16 +321,15 @@ function setActiveConversation(projectId, conversationId) {
 function deleteProject(projectId) {
   const state = loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
+  if (!project) throw new Error('项目不存在');
+  const deletedRuns = getRepository().listAgentRuns(projectId, 1000000);
   state.projects = state.projects.filter((item) => item.id !== projectId);
   if (state.activeProjectId === projectId) {
     state.activeProjectId = state.projects[0]?.id ?? null;
   }
   saveWorkspace(state);
 
-  if (project) {
-    const projectFolder = path.join(getLibraryPath(), projectId);
-    fs.rmSync(projectFolder, { recursive: true, force: true });
-  }
+  require('./project-cleanup').cleanupProjectFiles(app.getPath('userData'), project, deletedRuns, state.projects, getRepository().listAgentRuns(null, 1000000));
   return state;
 }
 
@@ -335,6 +377,7 @@ async function importDocuments(projectId, filePaths) {
 
       const id = crypto.randomUUID();
       const extension = path.extname(filePath).toLowerCase();
+      if (extension === '.xls') throw new Error('旧版 XLS 暂不支持，请另存为 XLSX 或 CSV 后导入。');
       const storedName = `${id}${extension}`;
       const storedPath = path.join(projectFolder, storedName);
       fs.copyFileSync(filePath, storedPath);
@@ -390,7 +433,7 @@ function removeDocument(projectId, documentId) {
 function saveDraft(projectId, draft) {
   if (draft.lengthReview?.contract) {
     const check = require('./length-control').inspectLength(draft.content, draft.lengthReview.contract);
-    const warning = check.passed ? null : `篇幅未达标：正文 ${check.actual} 汉字，要求${check.contract.label}。正文已保存，可查看、编辑和导出。`;
+    const warning = check.passed ? null : `篇幅未达标：正文 ${check.actual} ${check.contract.metric === 'words' ? '英文词' : '汉字'}，要求${check.contract.label}。正文已保存，可查看、编辑和导出。`;
     draft = { ...draft, lengthReview: { ...draft.lengthReview, ...check, warning },
       deliveryStatus: check.passed ? 'ready' : 'needs-revision',
       checks: [...(draft.checks || []).filter(item => !item.startsWith('篇幅未达标：')), ...(warning ? [warning] : [])] };
@@ -399,10 +442,18 @@ function saveDraft(projectId, draft) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
   const now = new Date().toISOString();
+  if (draft.mode === 'api') {
+    const audit = require('./research-workflow').auditDraft(draft.content, (draft.evidence || []).length);
+    const retained = (draft.checks || []).filter(message => !/未检测到脚注|不存在的脚注|事实性主张|篇幅未达标/.test(message));
+    const checks = [...new Set([...retained, ...audit, ...(draft.lengthReview?.warning ? [draft.lengthReview.warning] : [])])];
+    const review = require('./quality/delivery-review').reviewDelivery(checks, draft.lengthReview);
+    draft = { ...draft, checks, deliveryReview: review, deliveryStatus: review.status === 'blocked' ? 'needs-review' : review.status };
+  }
   normalizeConversations(project);
   const conversationId = draft.conversationId || project.activeConversationId;
   if (!project.conversations.some(item => item.id === conversationId)) throw new Error('对话不属于当前项目');
-  const saved = { id: draft.id || crypto.randomUUID(), createdAt: draft.createdAt || now, ...draft, conversationId, updatedAt: now };
+  const previous = project.drafts.find(item => item.id === draft.id);
+  const saved = require('./draft-history').versionDraft(previous, { id: draft.id || crypto.randomUUID(), createdAt: draft.createdAt || now, ...draft, conversationId }, now);
   const existingIndex = project.drafts.findIndex((item) => item.id === saved.id);
   if (existingIndex >= 0) project.drafts[existingIndex] = saved;
   else project.drafts.unshift(saved);
@@ -547,4 +598,6 @@ module.exports = {
   setActiveConversation,
   setApiKey,
   updateProject,
+  updateDocumentMetadata,
+  addRestoredProject,
 };

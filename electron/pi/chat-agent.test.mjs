@@ -22,7 +22,7 @@ const task = '告诉我你之前干了什么';
 try {
   const chatPlan = { tasks: [{ id: 'c', role: 'chat', task, skills: ['academic-writing-core'], dependsOn: [] }] };
   faux.setResponses([context => {
-    assert(context.systemPrompt.includes('只有明确请求论文正文/正式文档时才使用writer'));
+    assert(JSON.stringify(context).includes('局部文字修改可只有writer'));
     return response(JSON.stringify(chatPlan));
   }]);
   const planned = await planTasks({ layer, registry, userPrompt: task });

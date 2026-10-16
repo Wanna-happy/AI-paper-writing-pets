@@ -3,7 +3,9 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const asar = require('@electron/asar');
+const { isPublishableResearchFile } = require('../electron/skills/library-policy');
 const root = path.resolve(__dirname, '..');
+const skills = JSON.parse(fs.readFileSync(path.join(root, 'assets/research-skills/catalog/skills.json'), 'utf8')).skills;
 const release = path.resolve(process.argv[2] || '');
 assert(release.startsWith(root + path.sep), 'Only inspect a release within this workspace');
 const resources = path.join(release, 'win-unpacked/resources');
@@ -16,9 +18,8 @@ const paths = [
   'electron/pi/planner.mjs', 'electron/pi/registry.mjs', 'electron/pi/agent-tools.mjs', 'electron/pi/run-engine.mjs',
   'node_modules/@vscode/codicons/dist/codicon.css', 'node_modules/@vscode/codicons/dist/codicon.ttf', 'node_modules/@vscode/codicons/LICENSE',
 ];
-const skills = fs.readdirSync(path.join(root, 'assets/skills')).filter(name => name.startsWith('empirical-'));
 function files(folder) { return fs.readdirSync(folder, { withFileTypes: true }).flatMap(item => item.isDirectory() ? files(path.join(folder, item.name)) : [path.join(folder, item.name)]); }
-for (const skill of skills) paths.push(...files(path.join(root, 'assets/skills', skill)).map(file => path.relative(root, file).replaceAll('\\', '/')));
+for (const folder of ['assets/research-skills', 'assets/research-runtime', 'electron/skills']) paths.push(...files(path.join(root, folder)).map(file => path.relative(root, file).replaceAll('\\', '/')).filter(isPublishableResearchFile));
 const checked = paths.map(file => {
   const local = hash(fs.readFileSync(path.join(root, file)));
   assert.equal(hash(asar.extractFile(archive, path.normalize(file))), local, 'Packaged source mismatch: ' + file);

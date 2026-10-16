@@ -10,6 +10,7 @@
 
 import { Agent } from '@earendil-works/pi-agent-core';
 import { Type } from '@earendil-works/pi-ai';
+import contextPolicy from '../agent/context-policy.js';
 
 // 把一个简单的 execute(params) -> string 适配成 pi 的 AgentTool。
 // pi 工具要求 execute(toolCallId, params, signal, onUpdate) -> { content:[{type:'text',text}], details }，
@@ -37,9 +38,7 @@ export function wrapTool({ name, label, description, parameters, execute }) {
 export function createRoleAgent({ layer, role, systemPrompt, tools = [], scenario = 'writing', apiKey = '' }) {
   apiKey = layer.getApiKey ? layer.getApiKey(scenario) : apiKey;
   if (layer.getApiKey && !apiKey) throw new Error(`请配置 ${scenario} Agent 的 API Key，或配置可继承的共用密钥。`);
-  const streamFn = apiKey
-    ? (model, context, options) => layer.models.streamSimple(model, context, { ...(options || {}), apiKey })
-    : layer.models.streamSimple.bind(layer.models);
+  const streamFn = (model, context, options) => layer.models.streamSimple(model, contextPolicy.boundTranscript(context, model), { fetch: layer.fetch, ...(options || {}), ...(apiKey ? { apiKey } : {}) });
   const agent = new Agent({
     initialState: {
       systemPrompt,
@@ -56,28 +55,50 @@ export function createRoleAgent({ layer, role, systemPrompt, tools = [], scenari
 // 运行一个角色 Agent，返回它最终产出的文本。onDelta 可接流式增量。
 // pi may finish its loop without throwing on a failed or truncated response.
 // Validate the terminal message; even nonempty partial output is not success.
-export async function runAgent(agent, message, { onDelta = null, onTextReset = null, signal = null } = {}) {
+export async function runAgent(agent, message, { onDelta = null, onTextReset = null, onCommentaryCommit = null, onActivity = null, signal = null } = {}) {
   let finalMessage = null;
   let hasToolCall = false;
+  let thinkingReported = false;
+  let messageText = '';
+  let commentaryCommitted = false;
+  const commitCommentary = () => {
+    if (!commentaryCommitted && messageText.trim()) onCommentaryCommit?.(messageText.trim());
+    commentaryCommitted = true;
+  };
   signal?.throwIfAborted();
   const abort = () => agent.abort();
   signal?.addEventListener('abort', abort, { once: true });
   const unsubscribe = agent.subscribe((event) => {
+    if (event?.type === 'tool_execution_start') onActivity?.({ toolName: event.toolName, toolCallId: event.toolCallId, state: 'running', detail: { input: event.args } });
+    if (event?.type === 'tool_execution_end') {
+      const output = (event.result?.content || []).filter(item => item.type === 'text').map(item => item.text).join('\n').slice(0, 6000);
+      onActivity?.({ toolName: event.toolName, toolCallId: event.toolCallId, state: event.isError ? 'failed' : 'completed', detail: { output } });
+    }
     if (event?.type === 'message_start' && event.message?.role === 'assistant') {
       hasToolCall = false;
+      thinkingReported = false;
+      messageText = '';
+      commentaryCommitted = false;
       onTextReset?.();
+    }
+    // Reasoning models may stream for a long time before the first answer token.
+    // Report the phase, never the private reasoning text.
+    if (event?.type === 'message_update' && event.assistantMessageEvent?.type === 'thinking_delta' && !thinkingReported) {
+      thinkingReported = true;
+      onActivity?.({ state: 'thinking' });
     }
     if (event?.type === 'message_update' && event.assistantMessageEvent?.type === 'toolcall_start') {
       hasToolCall = true;
+      commitCommentary();
       onTextReset?.();
     }
     if (event?.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
       const delta = event.assistantMessageEvent.delta;
-      if (delta && !hasToolCall) onDelta?.(delta);
+      if (delta && !hasToolCall) { messageText += delta; onDelta?.(delta); }
     }
     if (event?.type === 'message_end' && event.message?.role === 'assistant') {
       finalMessage = event.message;
-      if (finalMessage.content?.some(block => block.type === 'toolCall')) onTextReset?.();
+      if (finalMessage.content?.some(block => block.type === 'toolCall')) { commitCommentary(); onTextReset?.(); }
     }
   });
   try {

@@ -1,0 +1,32 @@
+附件右侧预览点击链路修复
+日期：2026-10-16
+
+目标效果
+用户点击附件后，在右侧打开带文件名标签的预览，保持 DOCX 的文档版式，
+保留表格、图片和分页，支持缩放与全文滚动。上传资料只读；平台生成文档继续沿用现有编辑流程。
+
+根因和修改
+1. 已复现：实际产品的 will-frame-navigate 安全规则只允许 feed.html/index.html，
+   新增的 docx-preview.html、spreadsheet-preview.html 被拦截，导致右侧渲染器没有加载。
+   上一轮预览测试没有挂载真实 secureWindow 规则，因此漏掉了这个问题。
+2. 修复为只允许可信主页面嵌入两个固定路径的本地预览子页面。
+   不放开远程地址、任意本机文件、主页面跳转或子页面 IPC 权限，预览仍使用隔离沙箱。
+3. 上传后即使还没有选择对话，也可预览当前项目自己持有的文件。
+   对话文件仍按指定对话校验归属，跨项目和无效文件仍拒绝。
+4. 点击后立即打开右侧并显示加载状态；读取失败在面板内显示原因和重试入口，避免无反应。
+5. 增加 DOCX 缩放选择：适合宽度、50%、75%、100%、125%、150%、200%。
+
+验收证据
+- scripts/upload-preview-ipc-smoke.cjs：使用真实 prepareConversationFiles 导入合成文件，
+  通过真实 IPC、assertTrustedSender、previewUpload 和文件路径解析后显示。
+- BrowserWindow 使用生产一致的 sandbox=true、contextIsolation=true、nodeIntegration=false、
+  webSecurity=true 及 secureWindow，并通过点击输入框附件卡片触发预览。
+- 验证 DOCX 5 页、5 张表、5 张图、末页、150% 缩放和右侧分栏显示。
+- 验证无选中对话时预览已上传表格；无权限文件在面板内显示错误和重试。
+- 子页面无法访问 petAPI；跨域跳转、任意文件和主页面加载预览子页面仍被拒绝。
+- 既有 DOCX 和表格版式验收已补上真实安全规则，并重新通过。
+
+测试截图
+.ui-smoke/upload-preview-ipc-20261016/word-right-panel.png
+
+本次不修改用户研究资料，不重启当前运行程序，也不回滚其他对话的源码改动。

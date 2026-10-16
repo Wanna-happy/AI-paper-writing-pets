@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "methods": [
+    {
+      "id": "data-prep",
+      "name": "数据准备：筛选、缺失标记与数值转换（原文件保留）",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "ols",
+      "name": "线性回归 OLS",
+      "skillId": "67-econfin-workflow-toolkit::ols-regression",
+      "status": "available"
+    },
+    {
+      "id": "wls-gls",
+      "name": "加权/广义最小二乘",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "logit-probit",
+      "name": "二元Logit/Probit",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "multinomial-ordered",
+      "name": "多项/有序Logit",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "count-glm",
+      "name": "Poisson/负二项/GLM",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "quantile",
+      "name": "分位数回归",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "mixed-effects",
+      "name": "多层混合效应",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "panel-fe",
+      "name": "实体/双向固定效应",
+      "skillId": "67-econfin-workflow-toolkit::panel-data",
+      "status": "available"
+    },
+    {
+      "id": "panel-re",
+      "name": "面板随机效应",
+      "skillId": "67-econfin-workflow-toolkit::panel-data",
+      "status": "available"
+    },
+    {
+      "id": "panel-first-difference",
+      "name": "面板第一差分",
+      "skillId": "67-econfin-workflow-toolkit::panel-data",
+      "status": "available"
+    },
+    {
+      "id": "iv-2sls",
+      "name": "工具变量2SLS",
+      "skillId": "67-econfin-workflow-toolkit::iv-estimation",
+      "status": "available"
+    },
+    {
+      "id": "iv-gmm",
+      "name": "静态工具变量GMM",
+      "skillId": "67-econfin-workflow-toolkit::iv-estimation",
+      "status": "available"
+    },
+    {
+      "id": "simple-did",
+      "name": "共同处理时点DID",
+      "skillId": "67-econfin-workflow-toolkit::did-analysis",
+      "status": "available"
+    },
+    {
+      "id": "its",
+      "name": "中断时间序列",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "synthetic-control",
+      "name": "基础合成控制",
+      "skillId": "67-econfin-workflow-toolkit::synthetic-control",
+      "status": "available"
+    },
+    {
+      "id": "psm-ipw",
+      "name": "倾向得分匹配/加权",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "local-rdd",
+      "name": "基础局部线性RDD",
+      "skillId": "67-econfin-workflow-toolkit::rdd-analysis",
+      "status": "available"
+    },
+    {
+      "id": "descriptive",
+      "name": "描述统计与数据概况",
+      "skillId": "67-econfin-workflow-toolkit::stats",
+      "status": "available"
+    },
+    {
+      "id": "correlation",
+      "name": "相关分析",
+      "skillId": "67-econfin-workflow-toolkit::stats",
+      "status": "available"
+    },
+    {
+      "id": "group-tests",
+      "name": "均值/秩和/列联表检验",
+      "skillId": "67-econfin-workflow-toolkit::stats",
+      "status": "available"
+    },
+    {
+      "id": "reliability-efa",
+      "name": "信度与探索性因子",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "time-series",
+      "name": "ARIMA/VAR/VECM",
+      "skillId": "67-econfin-workflow-toolkit::time-series",
+      "status": "available"
+    },
+    {
+      "id": "prediction",
+      "name": "机器学习预测",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "trajectory-clustering",
+      "name": "面板轨迹聚类（欧氏/DTW）",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "survival",
+      "name": "Cox/事件史分析",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "available"
+    },
+    {
+      "id": "diagnostics",
+      "name": "回归假设与模型诊断",
+      "skillId": "50-brycewang-aer-skills::aer-robustness",
+      "status": "available"
+    },
+    {
+      "id": "robustness",
+      "name": "预先指定的敏感性/稳健性",
+      "skillId": "50-brycewang-aer-skills::aer-robustness",
+      "status": "available"
+    },
+    {
+      "id": "heterogeneity",
+      "name": "分组/交互异质性与系数图",
+      "skillId": "50-brycewang-aer-skills::aer-robustness",
+      "status": "available"
+    },
+    {
+      "id": "staggered-did",
+      "name": "错位实施现代DID",
+      "skillId": "67-econfin-workflow-toolkit::did-analysis",
+      "status": "requires-extension"
+    },
+    {
+      "id": "dynamic-panel-gmm",
+      "name": "动态面板系统/差分GMM",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "requires-extension"
+    },
+    {
+      "id": "sem-cfa",
+      "name": "结构方程/验证性因子",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "requires-extension"
+    },
+    {
+      "id": "tobit-heckman",
+      "name": "Tobit/Heckman选择",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "requires-extension"
+    },
+    {
+      "id": "spatial-econometrics",
+      "name": "空间计量SAR/SEM/SDM",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "requires-extension"
+    },
+    {
+      "id": "causal-ml",
+      "name": "双重机器学习/因果森林",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "requires-extension"
+    },
+    {
+      "id": "survey-design",
+      "name": "复杂抽样加权推断",
+      "skillId": "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "status": "requires-extension"
+    }
+  ]
+}

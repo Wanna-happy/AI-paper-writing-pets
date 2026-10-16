@@ -13,14 +13,26 @@ function assertTrustedSender(event, windows, root) {
     throw new Error('已拒绝不可信页面的本机操作请求');
   }
 }
+function isPreviewPage(url, root) {
+  try {
+    const parsed=new URL(url);
+    return parsed.protocol==='file:'&&!parsed.search&&!parsed.hash&&['docx-preview.html','spreadsheet-preview.html'].some(name=>
+      path.resolve(fileURLToPath(parsed)).toLowerCase()===path.resolve(root,'src',name).toLowerCase());
+  }catch{return false;}
+}
 function secureWindow(win, root) {
   const contents = win.webContents;
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   for (const name of ['will-navigate', 'will-frame-navigate', 'will-redirect']) contents.on(name, (event, url) => {
-    if (!isAppPage(typeof url === 'string' ? url : event.url, root)) event.preventDefault();
+    const target=typeof url==='string'?url:event.url;
+    if(isAppPage(target,root))return;
+    // Only the trusted workspace may embed the two fixed, opaque preview frames.
+    // This does not grant either frame IPC access or permit document navigation.
+    if(name==='will-frame-navigate'&&event.isMainFrame===false&&isAppPage(contents.mainFrame?.url,root)&&isPreviewPage(target,root))return;
+    event.preventDefault();
   });
   contents.on('will-attach-webview', event => event.preventDefault());
   contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   contents.session.setPermissionCheckHandler(() => false);
 }
-module.exports = { isAppPage, assertTrustedSender, secureWindow };
+module.exports = { isAppPage, isPreviewPage, assertTrustedSender, secureWindow };

@@ -125,6 +125,19 @@ for (const stopReason of ['error', 'length']) {
 }
 
 const analysisTask = { id: 'a', role: 'analyst', task: '分析数据', skills: [], dependsOn: [] };
+{
+  const f = fixture({ tasks: [analysisTask] });
+  f.faux.setResponses([
+    response([call('run_data_analysis', { request: '计算描述统计' })], { stopReason: 'toolUse' }),
+    response('重复输出整张表'.repeat(100), { stopReason: 'length' }),
+  ]);
+  const result = await runPlan({ layer: f.layer, registry: buildRegistry(), plan: { tasks: [analysisTask] }, context: {
+    runDataAnalysis: async () => ({ error: null, structured: { stepId: 'a1', methodId: 'descriptive', status: 'completed', sampleSize: 3,
+      summary: '均值为2', tables: [{ title: '描述统计', columns: ['变量', '均值'], rows: [['x', 2]] }], diagnostics: [], limitations: [] } }),
+  } });
+  assert.equal(result.outputs.a.text, 'a1：均值为2');
+  assert.equal(result.blocked, false, '模型的冗长尾述不应丢弃已完成的本地分析');
+}
 const dependentWriter = { ...writer, dependsOn: ['a'] };
 {
   let usedAttachments;

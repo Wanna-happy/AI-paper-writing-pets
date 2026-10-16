@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS = {
   dataEnvironment: {
     runtimeMode: 'bundled',
     pythonPath: '',
+    networkEnabled: false,
   },
 };
 
@@ -63,7 +64,7 @@ function loadSettings() {
       ...stored,
       pet: legacyPetMap[stored.pet] || stored.pet || DEFAULT_SETTINGS.pet,
       api: normalizeApiSettings(stored.api),
-      dataEnvironment: { ...DEFAULT_SETTINGS.dataEnvironment, ...(stored.dataEnvironment ?? {}) },
+      dataEnvironment: { ...DEFAULT_SETTINGS.dataEnvironment, ...(stored.dataEnvironment ?? {}), networkEnabled: stored.dataEnvironment?.networkEnabled === true },
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -71,8 +72,10 @@ function loadSettings() {
 }
 
 function saveSettings(partial) {
-  const next = { ...loadSettings(), ...partial };
+  const current = loadSettings();
+  const next = { ...current, ...partial };
   next.api = normalizeApiSettings(next.api);
+  next.dataEnvironment = { ...current.dataEnvironment, ...(partial.dataEnvironment || {}), networkEnabled: (partial.dataEnvironment?.networkEnabled ?? current.dataEnvironment.networkEnabled) === true };
   fs.mkdirSync(path.dirname(getSettingsPath()), { recursive: true });
   fs.writeFileSync(getSettingsPath(), JSON.stringify(next, null, 2), 'utf8');
   return next;

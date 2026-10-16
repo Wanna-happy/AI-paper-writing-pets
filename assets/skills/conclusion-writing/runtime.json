@@ -1,8 +1,0 @@
-{
-  "references": [
-    { "path": "../_shared/academic-writing/chapters/ch09-conclusion.md", "label": "结论与讨论", "maxCharacters": 8000 },
-    { "path": "../_shared/academic-writing/chapters/ch08-theory-dialogue.md", "label": "结论中的理论对话", "maxCharacters": 7000 },
-    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Discussion（讨论，倒漏斗，由窄到宽）", "label": "讨论章节写作剧本", "maxCharacters": 6000 },
-    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Conclusion（结论）", "label": "结论写作剧本", "maxCharacters": 3000 }
-  ]
-}

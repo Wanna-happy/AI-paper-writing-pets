@@ -38,6 +38,12 @@ import pandas as pd
 print('PANDAS_OK',flush=True)
 import scipy.stats
 print('SCIPY_OK',flush=True)
+import numpy as np
+from dtaidistance import dtw
+trajectories=[np.array([1.,2.,3.]),np.array([1.,2.,4.]),np.array([5.,6.,7.])]
+distances=dtw.distance_matrix_fast(trajectories,window=3,parallel=False)
+assert distances.shape==(3,3) and np.isfinite(distances).all() and np.allclose(distances,distances.T)
+print('DTW_OK',flush=True)
 import openpyxl
 print('OPENPYXL_OK',flush=True)
 import matplotlib
@@ -89,6 +95,7 @@ results['capability_count']=wintypes.DWORD.from_buffer(buf).value
 print(json.dumps(results))
 `;
     const result = await execute('boundaries', code);
+    assert(result.stdout.includes('DTW_OK'), '内置 DTW 库未在系统沙箱中完成距离计算');
     const checks = JSON.parse(result.stdout.trim().split('\n').pop());
     assert.equal(checks.mean, 2);
     for (const key of ['private_read', 'aap_read', 'outside_write', 'input_write', 'runtime_write', 'network', 'child_process', 'host_process', 'clean_env', 'appcontainer']) assert.equal(checks[key], true, key);

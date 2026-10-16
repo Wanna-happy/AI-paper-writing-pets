@@ -34,3 +34,17 @@ assert.equal(progress.shouldShowCard(progress.update(progress.update(threeTasks,
 const fourTasks = progress.update(null, { stage: 'plan-ready', tasks: ['a', 'b', 'c', 'd'].map(id => ({ id, label: id })) });
 assert.equal(progress.shouldShowCard(fourTasks), true, '四个实际任务开始显示卡片');
 console.log('Task progress dependencies, suspend/resume, audit failure and saved revision state passed');
+const verbose = '第3步（主）：DTW-K-Means 轨迹聚类：' + '保留完整方法、样本和参数。'.repeat(50);
+let execution = progress.update(progress.update(null, { stage: 'planning' }), { stage: 'plan-ready', tasks: [{ id: 's3', label: verbose }, { id: 's4', label: '第4步：模型预测' }] });
+execution = progress.update(execution, { stage: 'task-start', taskId: 's3', label: verbose });
+assert.equal(progress.summary(execution).text, '执行任务 1/2 · DTW-K-Means 轨迹聚类');
+assert.equal(execution.steps.find(step => step.id === 's3').label, verbose, '显示精简不能截断任务指令');
+assert(progress.shortLabel('长'.repeat(100)).length <= 28);
+assert(progress.userError('Error invoking remote method \'draft-resume\': Error: 402: {"message":"Insufficient Balance (request_id: secret)"}').includes('模型服务余额不足'));
+assert(!progress.userError('402: {"message":"Insufficient Balance (request_id: secret)"}').includes('secret'));
+assert.equal(progress.duration(338000), '5m 38s');
+assert.equal(progress.duration(3605000), '1h 0m 5s');
+assert.equal(progress.shouldShowCard({ ...fourTasks, status: 'failed' }), false);
+assert.equal(progress.shouldShowCard({ ...fourTasks, status: 'suspended' }), false);
+assert.equal(progress.shouldShowCard({ ...fourTasks, status: 'done' }), false);
+assert(!progress.completedSummary({ steps: [{ id: '$intent', status: 'done', label: '内部识别' }, { id: 'a', status: 'done', label: '聚类' }, { id: 'b', status: 'failed', label: '预测' }] }).includes('预测'));

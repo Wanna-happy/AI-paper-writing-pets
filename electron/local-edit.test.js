@@ -10,6 +10,11 @@ async function test() {
   await assert.rejects(applyLocalEdit({ ...footnoteBase, requestModel: async () => ({ content: '<p>改写1</p>' }) }), /脚注/);
   const footnoteResult = await applyLocalEdit({ ...footnoteBase, requestModel: async () => ({ content: '<p>改写<sup data-footnote="1">1</sup></p>' }) });
   assert(footnoteResult.content.includes('data-footnote'));
+  const statistics = { ...base, selectedText: '系数0.12，结果不显著。[E1]', selectedHtml: '<p>系数0.12，结果不显著。[E1]</p>' };
+  await assert.rejects(applyLocalEdit({ ...statistics, requestModel: async () => ({ content: '<p>系数9.99，结果显著。[E1]</p>' }) }), /数字|显著性/);
+  await assert.rejects(applyLocalEdit({ ...statistics, requestModel: async () => ({ content: '<p>系数0.12，结果显著。[E1]</p>' }) }), /显著性/);
+  const unchanged = await applyLocalEdit({ ...statistics, requestModel: async () => ({ content: '<p>结果不显著，系数0.12。[E1]</p>' }) });
+  assert(unchanged.comparison.before.includes('0.12'));
   console.log('local edit citation preservation passed');
 }
 test().catch(error => { console.error(error); process.exitCode = 1; });

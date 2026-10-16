@@ -1,32 +1,59 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
+const { selectCurrentDataFiles } = require('./project-files');
+const { normalizeDataSelection } = require('./tools/data-profile');
+const { MAX_TASKS } = require('./agent/flow-policy');
 
-const CATALOG_PATH = path.join(__dirname, '../assets/skills/empirical-analysis-plan/methods.json');
+const { CORE_SKILL_ID, WRITING_SKILL_ID, RESULT_SKILL_ID, LEGACY_IDS } = require('./skills/research-adapter');
+const CATALOG_PATH = path.join(__dirname, '../assets/research-runtime/methods.json');
 function methodCatalog() { return JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf8')).methods; }
 function short(value, max = 2000) { return String(value || '').trim().slice(0, max); }
 function fingerprint(file) { return createHash('sha256').update(fs.readFileSync(file)).digest('hex'); }
 function currentPlan(project, conversationId) { return project?.empiricalPlans?.[conversationId] || null; }
+const METHOD_ALIASES = {
+  'descriptive-statistics': ['descriptive', ''], '描述性统计': ['descriptive', ''], '描述统计': ['descriptive', ''],
+  'dtw-kmeans-clustering': ['trajectory-clustering', 'DTW + K-Means：保留指定的 DTW 距离，不替换为欧氏距离。'],
+  'dtw-k-means': ['trajectory-clustering', 'DTW + K-Means：保留指定的 DTW 距离，不替换为欧氏距离。'],
+  'lightgbm-prediction': ['prediction', '使用用户指定的 LightGBM，不替换算法。'],
+  'tree-shap-analysis': ['prediction', '计算用户指定树模型的 TreeSHAP，不替换解释方法。'],
+  'lowess-threshold-description': ['descriptive', '对用户指定的结果执行 LOWESS 平滑及阈值形态描述，不作因果解释。'],
+  'robustness-and-heterogeneity': ['robustness', '执行用户预先指定的稳健性和异质性分析，保留所有指定输出，不新增设定。'],
+};
+function resolveMethod(rawId, catalog = methodCatalog()) {
+  const id = String(rawId || '').trim().toLowerCase().replace(/_/g, '-');
+  const alias = METHOD_ALIASES[id];
+  const method = catalog.find(item => item.id === (alias?.[0] || id));
+  if (!method) {
+    const error = new Error(`未识别方法标识「${rawId}」。这表示名称未匹配，不能据此宣称方法不可执行或删除步骤。请沿用原研究方法，使用索引中的 methodId 重新提交。可用标识：${catalog.filter(item => item.status === 'available').map(item => item.id).join('、')}`);
+    error.code = 'METHOD_ID_UNKNOWN'; throw error;
+  }
+  if (method.status !== 'available') {
+    const error = new Error(`方法「${method.name}」(${method.id}) 尚未接入执行指导。保留用户研究要求并如实说明限制，不能擅自替换方法。`);
+    error.code = 'METHOD_NOT_CONNECTED'; throw error;
+  }
+  return { method, constraint: alias?.[1] || '', requestedId: String(rawId || '') };
+}
 
 function normalizeProposal(input, { projectId, conversationId, attachments, resolveAttachment, previous }) {
   if (!conversationId) throw new Error('实证方案必须属于一个明确的项目对话。');
   const methods = new Map(methodCatalog().map(method => [method.id, method]));
-  const selected = attachments.filter(file => file.name === input.dataFile && ['.csv', '.xlsx'].includes(String(file.extension).toLowerCase()));
+  const uniqueAttachments = [...new Map(attachments.map(file => [file.id || file.name, file])).values()];
+  const selected = selectCurrentDataFiles(uniqueAttachments).filter(file => (file.name === input.dataFile || file.id === input.dataFile) && ['.csv', '.xlsx'].includes(String(file.extension).toLowerCase()));
   if (selected.length !== 1) throw new Error('请先选择唯一的 CSV/XLSX 数据文件；多个文件须先说明合并规则。');
   const source = resolveAttachment(selected[0]);
   if (!source || !fs.existsSync(source)) throw new Error('方案中的数据文件已不可用，请重新上传。');
-  if (!Array.isArray(input.steps) || !input.steps.length || input.steps.length > 18) throw new Error('分析方案需要 1—18 个具体步骤。');
+  if (!Array.isArray(input.steps) || !input.steps.length || input.steps.length > MAX_TASKS) throw new Error(`分析方案需要 1—${MAX_TASKS} 个具体步骤。`);
   if (!short(input.researchQuestion) || !short(input.dataDescription)) throw new Error('请先明确研究问题和数据单位、变量含义。');
   const ids = new Set();
   const steps = input.steps.map((raw, index) => {
     const id = `a${index + 1}`;
-    const method = methods.get(raw.methodId);
-    if (!method || method.status !== 'available') throw new Error(`方法 ${raw.methodId} 尚无已接入的执行路径，请说明限制并调整方案，不能暗中换方法。`);
+    const { method, constraint, requestedId } = resolveMethod(raw.methodId, [...methods.values()]);
     if (!short(raw.purpose) || !short(raw.specification)) throw new Error('每个步骤都需要目的和具体变量/模型/检验设定。');
     ids.add(id);
-    return { id, methodId: method.id, skillId: method.skillId, label: short(raw.label, 120) || method.name,
-      purpose: short(raw.purpose), specification: short(raw.specification, 4000),
-      outputs: short(raw.outputs), required: raw.required !== false, status: 'pending' };
+    return { id, methodId: method.id, requestedMethodId: requestedId, skillId: method.skillId, label: short(raw.label, 120) || method.name,
+      purpose: short(raw.purpose), specification: short(constraint && !String(raw.specification).startsWith(constraint) ? [constraint, raw.specification].join('\n') : raw.specification, 4000),
+      outputs: short(raw.outputs) || '结果表与诊断', required: raw.required !== false, status: 'pending' };
   });
   return { version: 1, id: previous?.id || randomUUID(), revision: (previous?.revision || 0) + 1,
     projectId, conversationId, status: 'pending-confirmation', createdAt: new Date().toISOString(),
@@ -36,6 +63,7 @@ function normalizeProposal(input, { projectId, conversationId, attachments, reso
     writingTask: short(input.writingTask, 2000), originalTask: short(input.originalTask, 4000),
     missingDataPolicy: short(input.missingDataPolicy), interpretationLimits: short(input.interpretationLimits),
     attachment: { id: selected[0].id, name: selected[0].name, extension: selected[0].extension, size: selected[0].size },
+    dataSelection: normalizeDataSelection(input.dataSelection || {}),
     dataFingerprint: fingerprint(source), steps,
     history: previous ? [...(previous.history || []), { revision: previous.revision, status: previous.status, steps: previous.steps, results: previous.results || [], writingProposal: previous.writingProposal || null }].slice(-10) : [] };
 }
@@ -59,9 +87,9 @@ function approvePlan(plan, approval, { projectId, conversationId, resolveAttachm
 function executionPlan(plan) {
   if (!plan || !['approved', 'writing-approved'].includes(plan.status)) throw new Error('只有用户确认的方案才能执行');
   if (plan.status === 'writing-approved') return { tasks: [{ id: 'empirical-write', role: 'writer', task: `${plan.writingProposal.title}\n${plan.writingProposal.task}\n章节：${plan.writingProposal.sections.join('；')}\n篇幅：${plan.writingProposal.lengthRequirement}`,
-    skills: ['academic-writing-core', 'empirical-writing', 'empirical-result-handoff'], dependsOn: [] }], empiricalPlanId: plan.id, empiricalRevision: plan.revision };
+    skills: [CORE_SKILL_ID, WRITING_SKILL_ID, RESULT_SKILL_ID], dependsOn: [] }], empiricalPlanId: plan.id, empiricalRevision: plan.revision };
   const tasks = plan.steps.map((step, index) => ({ id: step.id, role: 'analyst', task: `${step.label}：${step.specification}`,
-    skills: [step.skillId, 'empirical-result-handoff'], empiricalStepId: step.id, dependsOn: index ? [plan.steps[index - 1].id] : [] }));
+    skills: [LEGACY_IDS[step.skillId] || step.skillId, RESULT_SKILL_ID], empiricalStepId: step.id, dependsOn: index ? [plan.steps[index - 1].id] : [] }));
   return { tasks, empiricalPlanId: plan.id, empiricalRevision: plan.revision };
 }
 
@@ -109,10 +137,15 @@ function parseResult(stdout, { plan, step, sourceFingerprint }) {
   if (!['completed', 'not-applicable'].includes(result.status) || !short(result.summary)) throw new Error('分析结果状态无效');
   if (!Number.isInteger(result.sampleSize) || result.sampleSize < 0) throw new Error('分析缺少真实样本量');
   if (!Array.isArray(result.tables) || result.tables.length > 20 || !Array.isArray(result.diagnostics)) throw new Error('结果必须包含表格列表及诊断列表');
-  for (const table of result.tables) {
+  for (const [tableIndex, table] of result.tables.entries()) {
     if (!short(table.title) || !Array.isArray(table.columns) || !table.columns.length || table.columns.length > 80 || !Array.isArray(table.rows) || table.rows.length > 1000) throw new Error('结果表格结构无效或过大');
     if (table.columns.some(column => typeof column !== 'string' || !column.trim() || column.length > 250)) throw new Error('结果表格列标题无效');
-    for (const row of table.rows) if (!Array.isArray(row) || row.length !== table.columns.length || row.some(cell => cell !== null && (!['string', 'number', 'boolean'].includes(typeof cell) || (typeof cell === 'number' && !Number.isFinite(cell))))) throw new Error('结果表格的行列不一致或数值无效');
+    for (const [rowIndex, row] of table.rows.entries()) {
+      const where = `第 ${tableIndex + 1} 张表「${table.title}」第 ${rowIndex + 1} 行`;
+      if (!Array.isArray(row) || row.length !== table.columns.length) throw new Error(`${where}有 ${Array.isArray(row) ? row.length : 0} 个单元格，表头有 ${table.columns.length} 列；该表未通过结果校验。`);
+      const invalid = row.findIndex(cell => cell !== null && (!['string', 'number', 'boolean'].includes(typeof cell) || (typeof cell === 'number' && !Number.isFinite(cell))));
+      if (invalid >= 0) throw new Error(`${where}的「${table.columns[invalid]}」不是有效数值或文本；该表未通过结果校验。`);
+    }
   }
   if (result.status === 'completed' && !result.tables.length) throw new Error('已完成的分析必须提供可追溯结果表，不能只给结论');
   if (result.status === 'not-applicable' && !short(result.reason)) throw new Error('不适用结果必须说明原因');
@@ -123,4 +156,4 @@ function parseResult(stdout, { plan, step, sourceFingerprint }) {
     reason: short(result.reason), dataFingerprint: sourceFingerprint, createdAt: new Date().toISOString() };
 }
 
-module.exports = { methodCatalog, currentPlan, normalizeProposal, savePlan, approvePlan, executionPlan, planningContext, validateStep, parseResult, fingerprint, proposeWriting, approveWriting };
+module.exports = { methodCatalog, resolveMethod, METHOD_ALIASES, currentPlan, normalizeProposal, savePlan, approvePlan, executionPlan, planningContext, validateStep, parseResult, fingerprint, proposeWriting, approveWriting };

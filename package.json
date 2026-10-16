@@ -59,6 +59,9 @@
     },
     "files": [
       "assets/**/*",
+      "!assets/research-skills/skills/49-voidborne-d-humanize-chinese/**/*",
+      "!assets/research-skills/skills/54-scdenney-open-science-skills/**/*",
+      "!assets/research-skills/skills/67-econfin-workflow-toolkit/significance-search/**/*",
       "electron/**/*",
       "src/**/*",
       "package.json",

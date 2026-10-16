@@ -1,9 +1,0 @@
-{
-  "references": [
-    { "path": "../_shared/academic-writing/chapters/ch01-form-logic.md", "label": "论文整体形式逻辑", "maxCharacters": 6000 },
-    { "path": "../_shared/academic-writing/chapters/ch02-topic-material.md", "label": "选题与材料准备", "maxCharacters": 6000 },
-    { "path": "../_shared/academic-writing/references/paradigm-selector.md", "label": "研究范式选择", "maxCharacters": 9000 },
-    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Title（标题）", "label": "标题写作剧本", "maxCharacters": 3000 },
-    { "path": "../_shared/scipilot/section_playbooks.md", "section": "## Abstract（摘要）", "label": "摘要写作剧本", "maxCharacters": 4000 }
-  ]
-}

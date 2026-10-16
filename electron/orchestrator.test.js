@@ -46,7 +46,8 @@ async function test() {
   assert.equal(capturedContext.attachments.length, 2);
   assert(capturedContext.writingContext.includes('new.txt'));
   assert.equal(runs.get('r2').status, 'COMPLETED');
-  assert.equal(resumed.progress.status, 'done');
+  assert.equal(resumed.userAction, 'resume', '恢复操作必须单独记录，历史展示不得重新回显任务全文');
+  assert.equal(resumed.progress.status, 'review', '没有来源的正文必须标记待复核');
   await assert.rejects(engine.resume({ projectId: 'p', runId: 'r1', request: { requestId: 'r3' } }), /未找到/);
   console.log('orchestrator suspend/resume/context regression passed');
 }

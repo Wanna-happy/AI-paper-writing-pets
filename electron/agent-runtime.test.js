@@ -65,9 +65,9 @@ async function run() {
 
     const routed = new SkillRuntime(path.join(__dirname, '../assets/skills'));
     const empirical = routed.composePrompt({}, '请对 CSV 数据做实证分析并完成可视化', ['academic-writing-core', 'empirical-writing', 'data-analysis', 'data-visualization']);
-    assert.match(empirical.prompt, /社科定量统计分析/);
-    assert.match(empirical.prompt, /数据可视化与表图规范/);
-    assert.match(empirical.prompt, /经验材料的组织/);
+    assert.match(empirical.prompt, /本轮外部研究技能/);
+    assert(empirical.skill.ids.every(id => id.includes('::')));
+    assert.match(empirical.prompt, /PAPER_PET_RESULT/);
     assert.ok(routed.fallbackSkillIds('请写研究设计并做实证分析、数据分析和可视化').length <= 4);
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });

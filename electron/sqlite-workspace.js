@@ -61,6 +61,10 @@ class SqliteWorkspaceRepository {
         data TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS tool_runs_cache_key ON tool_runs(cache_key);
+      CREATE TRIGGER IF NOT EXISTS delete_project_runs BEFORE DELETE ON projects BEGIN
+        DELETE FROM tool_runs WHERE agent_run_id IN (SELECT id FROM agent_runs WHERE project_id=OLD.id);
+        DELETE FROM agent_runs WHERE project_id=OLD.id;
+      END;
       CREATE TABLE IF NOT EXISTS conversation_turns (
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         conversation_id TEXT NOT NULL,
@@ -96,21 +100,22 @@ class SqliteWorkspaceRepository {
 
   loadWorkspace() {
     const projects = this.database.prepare('SELECT id, data FROM projects ORDER BY sort_order, rowid').all()
-      .map((row) => ({ ...parseJson(row.data), id: row.id, documents: [], drafts: [], messages: [] }));
+      .map((row) => ({ ...JSON.parse(row.data), id: row.id, documents: [], drafts: [], messages: [] }));
     const projectsById = new Map(projects.map((project) => [project.id, project]));
     for (const row of this.database.prepare('SELECT id, project_id, data FROM documents ORDER BY project_id, sort_order, rowid').all()) {
       const project = projectsById.get(row.project_id);
-      if (project) project.documents.push({ ...parseJson(row.data), id: row.id });
+      if (project) project.documents.push({ ...JSON.parse(row.data), id: row.id });
     }
     for (const row of this.database.prepare('SELECT id, project_id, data FROM drafts ORDER BY project_id, sort_order, rowid').all()) {
       const project = projectsById.get(row.project_id);
-      if (project) project.drafts.push({ ...parseJson(row.data), id: row.id });
+      if (project) project.drafts.push({ ...JSON.parse(row.data), id: row.id });
     }
     const activeProjectId = this.getMetadata('active_project_id');
     for (const row of this.database.prepare("SELECT project_id,conversation_id,data FROM conversation_turns WHERE json_extract(data,'$.channel')='chat' ORDER BY created_at,rowid").all()) {
-      projectsById.get(row.project_id)?.messages.push({ ...parseJson(row.data), conversationId: row.conversation_id });
+      projectsById.get(row.project_id)?.messages.push({ ...JSON.parse(row.data), conversationId: row.conversation_id });
     }
     return {
+      revision: Number(this.getMetadata('workspace_revision') || 0),
       activeProjectId: projectsById.has(activeProjectId) ? activeProjectId : (projects[0]?.id ?? null),
       projects,
     };
@@ -132,6 +137,8 @@ class SqliteWorkspaceRepository {
     `);
     this.database.exec('BEGIN IMMEDIATE');
     try {
+      const revision = Number(this.getMetadata('workspace_revision') || 0);
+      if (state.revision != null && state.revision !== revision) throw new Error('工作区已由另一个操作更新，请重新加载后重试；未覆盖已有数据。');
       const projectIds = [];
       const documentIds = [];
       const draftIds = [];
@@ -153,7 +160,9 @@ class SqliteWorkspaceRepository {
       this.deleteMissing('documents', documentIds);
       this.deleteMissing('projects', projectIds);
       this.setMetadata('active_project_id', state?.activeProjectId || '');
+      this.setMetadata('workspace_revision', String(revision + 1));
       this.database.exec('COMMIT');
+      state.revision = revision + 1;
     } catch (error) {
       this.database.exec('ROLLBACK');
       throw error;
@@ -198,6 +207,8 @@ class SqliteWorkspaceRepository {
   }
 
   deleteConversationMemory(projectId, conversationId) {
+    this.database.prepare("DELETE FROM tool_runs WHERE agent_run_id IN (SELECT id FROM agent_runs WHERE project_id=? AND (json_extract(data,'$.conversationId')=? OR json_extract(data,'$.checkpoint.conversationId')=?))").run(projectId, conversationId, conversationId);
+    this.database.prepare("DELETE FROM agent_runs WHERE project_id=? AND (json_extract(data,'$.conversationId')=? OR json_extract(data,'$.checkpoint.conversationId')=?)").run(projectId, conversationId, conversationId);
     this.database.prepare('DELETE FROM conversation_turns WHERE project_id=? AND conversation_id=?').run(projectId, conversationId);
     this.database.prepare('DELETE FROM conversation_memories WHERE project_id=? AND conversation_id=?').run(projectId, conversationId);
   }

@@ -23,6 +23,10 @@ async function test() {
     const dependencies = { attachments: [attachment], resolveAttachment: () => source, userDataPath: root, projectId: 'synthetic', loadSettings: () => ({}), findPython: findPythonExecutable };
     const profile = await inspectDataFile({ ...dependencies, attachment });
     assert.equal(profile.rows, 128); assert.equal(profile.columns.length, 5);
+    assert.equal(profile.fileId, attachment.id);
+    const xStats = profile.columns.find(item => item.name === 'x').statistics;
+    assert.equal(xStats.n, 128);
+    assert(Number.isFinite(xStats.mean) && xStats.min <= xStats.q1 && xStats.q1 <= xStats.median && xStats.median <= xStats.q3 && xStats.q3 <= xStats.max);
     const code = `import os,json
 assert os.environ.get('JOBLIB_MULTIPROCESSING') == '0'
 import numpy as np,pandas as pd

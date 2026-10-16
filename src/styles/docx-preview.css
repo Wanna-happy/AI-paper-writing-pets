@@ -1,0 +1,4 @@
+html, body { margin: 0; background: #2a2a2a; }
+.docx-wrapper { padding: 12px !important; overflow-anchor:none; }
+.docx-wrapper > section.docx { margin-bottom: 16px !important; }
+.preview-search-hit { outline:2px solid #df8c36; outline-offset:2px; }

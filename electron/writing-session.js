@@ -67,31 +67,61 @@ function getWritingLevel(project) {
   };
 }
 
-function parseLengthRequirement(task) {
+function requestedLanguage(task, fallback = '中文') {
+  const source = String(task || '');
+  const explicit = [...source.matchAll(/(?:用|以|输出|译成|翻成|翻译成|写成|in\s+)\s*(中文|英文|English|Chinese)/gi)].at(-1)?.[1];
+  const named = [...source.matchAll(/(中文|英文)(?:摘要|论文|正文)/g)].at(-1)?.[1];
+  const value = explicit || named;
+  return value ? /英文|English/i.test(value) ? '英文' : '中文' : fallback || '中文';
+}
+function parseLengthRequirement(task, language = '中文') {
+  language = requestedLanguage(task, language);
   const source = String(task || '').replace(/,/g, '');
+  const wordUnit = '英文词';
+  const wordRange = source.match(/(\d+)\s*(?:—+|-+|–|~|to|至|到)\s*(\d+)\s*(?:words?\b|单词|英文词)/i);
+  const wordSingle = source.match(/(?:(?:at least|at most|no more than|about|approximately|至少|不少于|不超过|最多|约)\s*)?(\d+)\s*(?:words?\b|单词|英文词)/i);
+  if (wordRange) {
+    const minimum = Number(wordRange[1]), maximum = Number(wordRange[2]);
+    if (minimum > maximum) throw new Error('篇幅范围的下限不能大于上限');
+    return { label: `${minimum}—${maximum} ${wordUnit}`, minimum, maximum, metric: 'words', source: 'user' };
+  }
+  if (wordSingle) {
+    const target = Number(wordSingle[1]), phrase = wordSingle[0];
+    if (/at least|至少|不少于/i.test(phrase)) return { label: `不少于 ${target} ${wordUnit}`, minimum: target, maximum: null, metric: 'words', source: 'user' };
+    if (/at most|no more than|不超过|最多/i.test(phrase)) return { label: `不超过 ${target} ${wordUnit}`, minimum: null, maximum: target, metric: 'words', source: 'user' };
+    const approximate = /about|approximately|约/i.test(phrase);
+    return { label: `${approximate ? '约 ' : ''}${target} ${wordUnit}`, minimum: approximate ? Math.round(target * .9) : target, maximum: approximate ? Math.round(target * 1.1) : target, target, metric: 'words', source: 'user' };
+  }
+  const metric = /英文|english/i.test(language) && !/中英|中文字符|汉字/i.test(source + language) ? 'words' : 'hanzi';
+  const lengthUnit = metric === 'words' ? wordUnit : '个中文字符';
   const unit = (number, marker) => Math.round(Number(number) * (marker === '万' ? 10000 : marker === '千' ? 1000 : 1));
   const range = source.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:—+|－+|-+|～|~|至|到)\s*(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:个\s*)?(?:中文字符|汉字|字符|字)/i);
   if (range) {
     const minimum = unit(range[1], range[2] || range[4]);
     const maximum = unit(range[3], range[4] || range[2]);
     if (minimum > maximum) throw new Error('篇幅范围的下限不能大于上限');
-    return { label: `${minimum}—${maximum} 个中文字符`, minimum, maximum, metric: 'hanzi', source: 'user' };
+    return { label: `${minimum}—${maximum} ${lengthUnit}`, minimum, maximum, metric, source: 'user' };
   }
   const single = source.match(/(?:约|大约|左右|不少于|至少|不超过|至多|最多|控制在|篇幅为|字数为|正文)?\s*(\d+(?:\.\d+)?)\s*(万|千)?\s*(?:个\s*)?(?:中文字符|汉字|字符|字)/i);
   if (!single) return null;
   const target = unit(single[1], single[2]);
   if (/不少于|至少/.test(source.slice(Math.max(0, single.index - 8), single.index + single[0].length))) {
-    return { label: `不少于 ${target} 个中文字符`, minimum: target, maximum: null, metric: 'hanzi', source: 'user' };
+    return { label: `不少于 ${target} ${lengthUnit}`, minimum: target, maximum: null, metric, source: 'user' };
   }
-  if (/不超过|至多|最多/.test(single[0])) return { label: `不超过 ${target} 个中文字符`, minimum: null, maximum: target, metric: 'hanzi', source: 'user' };
+  if (/不超过|至多|最多/.test(single[0])) return { label: `不超过 ${target} ${lengthUnit}`, minimum: null, maximum: target, metric, source: 'user' };
   const approximate = /约|大约|左右/.test(single[0]) || /^\s*(?:左右|上下)/.test(source.slice(single.index + single[0].length));
-  return { label: `${approximate ? '约 ' : ''}${target} 个中文字符`, minimum: approximate ? Math.round(target * 0.9) : target, maximum: approximate ? Math.round(target * 1.1) : target, target, metric: 'hanzi', source: 'user' };
+  return { label: `${approximate ? '约 ' : ''}${target} ${lengthUnit}`, minimum: approximate ? Math.round(target * 0.9) : target, maximum: approximate ? Math.round(target * 1.1) : target, target, metric, source: 'user' };
 }
 
 function buildLengthGuidance(project, task, outputContract = {}) {
   outputContract = outputContract || {}; // 默认参数只对 undefined 生效；调用方可能显式传 null，这里兜底防空
   const level = getWritingLevel(project);
-  const explicit = parseLengthRequirement(task);
+  const language = requestedLanguage(task, project?.language);
+  const explicit = parseLengthRequirement(task, language);
+  if (/英文|english/i.test(language || '') || explicit?.metric === 'words') {
+    const scope = outputContract.scope || '本轮指定范围';
+    return `篇幅判定：${scope}。按项目语言输出英文，用户本轮明确语言要求优先。\n${explicit ? `用户明确篇幅：${explicit.label}；篇幅数据：${JSON.stringify(explicit)}。按正文英文词计数，不计标题、脚注、参考文献和引用标记。` : '没有指定词数时按本轮交付范围合理安排，并遵循目标期刊/学校要求；不使用中文汉字段长和总字数作为英文词数要求。'}\n只修订表达与篇幅，保留来源、数字和事实结论。`;
+  }
   const source = String(task || '');
   let scope = outputContract.scope === 'chapter' ? '完整章节'
     : outputContract.scope === 'paragraph' ? '单个段落'
@@ -149,4 +179,5 @@ module.exports = {
   buildProjectMemory,
   getWritingLevel,
   parseLengthRequirement,
+  requestedLanguage,
 };

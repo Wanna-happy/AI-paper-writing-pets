@@ -1,0 +1,51 @@
+const { app, BrowserWindow } = require('electron');
+const path = require('node:path'), fs = require('node:fs');
+const root = path.resolve(__dirname, '../.ui-smoke/resume-milestones');
+app.setPath('userData', root);
+app.whenReady().then(async () => {
+  let win;
+  try {
+    fs.mkdirSync(root, { recursive: true });
+    win = new BrowserWindow({ show: false, width: 1540, height: 1000, webPreferences: { preload: path.join(__dirname, 'ui-smoke-preload.cjs'), contextIsolation: true, backgroundThrottling: false } });
+    await win.loadFile(path.resolve(__dirname, '../src/feed.html'));
+    await win.webContents.executeJavaScript('(' + (async () => {
+      for (let i = 0; i < 100 && !document.querySelector('.assistant-reply'); i++) await new Promise(r => setTimeout(r, 20));
+      switchView('workbench');
+      const check = (value, message) => { if (!value) throw new Error(message); };
+      await window.petAPI.setResumeError('402: {"message":"Insufficient Balance (request_id: secret-request)"}');
+      await startResume('r', 'c', '确认分析方案：' + '旧研究问题'.repeat(100));
+      const latest = [...el.conversation.querySelectorAll('.chat-exchange')].at(-1);
+      check(latest.querySelector('.message-bubble').textContent === '恢复任务', '恢复任务回显了旧提示词');
+      check(latest.textContent.includes('模型服务余额不足') && !latest.textContent.includes('secret-request'), '余额错误未转换或泄露请求标识');
+      check(latest.querySelector('[data-resume-run="r"]'), '失败后丢失恢复入口');
+      const request = (await window.petAPI.getResumeRequests()).at(-1)[2];
+      check(!Object.hasOwn(request, 'task'), '恢复请求不应把前端旧文本作为新意图');
+      const view = appendStreamingExchange('恢复任务');
+      streamingDraft = { requestId: 'milestone', projectId: 'p', conversationId: 'c', content: '', ...view };
+      handleTaskStatus({ requestId: 'milestone', stage: 'plan-ready', tasks: [1,2,3,4].map(i => ({ id: 't' + i, label: ['轨迹聚类','模型预测','贡献分析','稳健性检验'][i-1] })) });
+      handleTaskStatus({ requestId: 'milestone', stage: 'task-start', taskId: 't1', label: '轨迹聚类' });
+      for (const stage of ['intent-start', 'memory-compaction', 'planning']) handleTaskStatus({ requestId: 'milestone', stage });
+      check(el['task-progress-card'].querySelectorAll('li').length === 4, '内部阶段混入任务列表');
+      check(!el['task-progress-card'].querySelector('[data-task-id^="$"]'), '内部阶段仍可见');
+      const output = { stage: 'task-output', taskId: 't1', role: 'analyst', status: 'completed', label: '第3步：轨迹聚类', summary: '已完成两组轨迹分类，组规模为17和14。', text: '实际分析完整报告\n\n包含参数、诊断和解释限制。' };
+      handleTaskStatus({ requestId: 'milestone', ...output });
+      const milestone = view.assistantMessage.querySelector('.task-milestone');
+      check(milestone.querySelector('strong').textContent.includes('已完成 · 轨迹聚类'), '阶段名称不明确');
+      check(milestone.querySelector('.task-milestone__brief').textContent.includes('17和14') && !milestone.querySelector('details').open, '阶段结论没有直接展示');
+      handleTaskStatus({ requestId: 'milestone', ...output });
+      check(view.assistantMessage.querySelectorAll('.task-milestone').length === 1, '重复事件生成重复小结');
+      handleTaskStatus({ requestId: 'milestone', stage: 'task-output', taskId: 't2', role: 'analyst', status: 'blocked', label: '模型预测', text: '依赖尚未准备好。' });
+      check(view.assistantMessage.querySelectorAll('.task-milestone strong')[1].textContent.includes('尚未完成'), '失败阶段被标为完成');
+      streamingDraft = null;
+      activeProject().messages.push({ id: 'resume-history', channel: 'chat', conversationId: 'c', userAction: 'resume', task: '历史原始任务'.repeat(100), text: '模型服务余额不足。', status: 'failed', createdAt: '2030-01-01', interactionTimeline: [{ ...output, type: 'task-output' }] });
+      renderConversation();
+      const history = [...el.conversation.querySelectorAll('.chat-exchange')].at(-1);
+      check(history.querySelector('.message-bubble').textContent === '恢复任务' && history.querySelector('.task-milestone__brief').textContent.includes('17和14'), '刷新后操作或阶段结论丢失');
+      el['chat-scroll'].style.scrollBehavior = 'auto'; scrollConversation();
+    }).toString() + ')()');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    fs.writeFileSync(path.join(root, '01-resume-milestones.png'), (await win.webContents.capturePage()).toPNG());
+    console.log('Concise checkpoint resume, no injected task, readable balance failure/retry, hidden internal phases, real milestone summary/details, deduplication and history passed');
+    win.destroy(); app.exit(0);
+  } catch (error) { console.error(error.stack); win?.destroy(); app.exit(1); }
+});

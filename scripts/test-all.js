@@ -2,7 +2,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const root = path.resolve(__dirname, '..');
-const tests = ['electron', 'electron/pi'].flatMap(folder => fs.readdirSync(path.join(root, folder))
+const tests = ['electron', 'electron/agent', 'electron/pi', 'electron/sandbox'].flatMap(folder => fs.readdirSync(path.join(root, folder))
   .filter(name => /\.test\.(js|mjs)$/.test(name)).map(name => `${folder}/${name}`));
 let failed = 0;
 for (const file of tests) {

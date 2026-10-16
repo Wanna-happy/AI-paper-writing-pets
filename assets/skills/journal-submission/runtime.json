@@ -1,8 +1,0 @@
-{
-  "references": [
-    { "path": "../_shared/academic-writing/chapters/ch10-submission-ethics.md", "label": "投稿与写作伦理", "maxCharacters": 9000 },
-    { "path": "../_shared/scipilot/cover_letter_and_rebuttal.md", "label": "投稿信与审稿回复", "maxCharacters": 10000 },
-    { "path": "../_shared/scholar-forge/integrity-protocol.md", "label": "引用诚信协议", "maxCharacters": 4000 },
-    { "path": "../_shared/scholar-forge/chinese-academic.md", "label": "中文学术与 GB/T 7714", "maxCharacters": 6000 }
-  ]
-}

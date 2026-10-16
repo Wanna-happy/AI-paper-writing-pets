@@ -24,6 +24,7 @@ node_modules.incomplete/
 .local-runtime/
 .ui-smoke/
 .main-smoke/
+.live-chat-smoke/
 .runtime-downloads/
 assets/python/win32-x64/
 api-diagnostic.json

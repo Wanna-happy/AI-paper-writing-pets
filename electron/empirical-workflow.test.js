@@ -12,10 +12,21 @@ const input = { researchQuestion: 'x与y的关联', objective: 'association', da
   missingDataPolicy: '完整案例', interpretationLimits: '不推断因果', steps: [{ methodId: 'ols', label: '主回归', purpose: '估计关联', specification: 'y ~ x，HC3标准误', outputs: '系数表' }] };
 try {
   const pending = e.normalizeProposal(input, scope);
+  const aliases = ['descriptive-statistics', 'dtw-kmeans-clustering', 'lightgbm-prediction', 'tree-shap-analysis', 'lowess-threshold-description', 'robustness-and-heterogeneity'];
+  const chain = e.normalizeProposal({ ...input, steps: aliases.map(methodId => ({ methodId, purpose: '保留用户方法链', specification: '沿用变量、样本与已确认参数', outputs: '保留对应结果表' })) }, scope);
+  assert.deepEqual(chain.steps.map(step => step.methodId), ['descriptive', 'trajectory-clustering', 'prediction', 'prediction', 'descriptive', 'robustness']);
+  assert.deepEqual(chain.steps.map(step => step.requestedMethodId), aliases);
+  assert(chain.steps[1].specification.includes('DTW') && chain.steps[1].specification.includes('不替换为欧氏'));
+  assert(chain.steps[2].specification.includes('LightGBM')); assert(chain.steps[3].specification.includes('TreeSHAP')); assert(chain.steps[4].specification.includes('LOWESS'));
+  assert.throws(() => e.resolveMethod('invented-new-method'), error => error.code === 'METHOD_ID_UNKNOWN' && !error.message.includes('尚无已接入'));
+
   assert.equal(pending.status, 'pending-confirmation');
   assert.throws(() => e.executionPlan(pending), /确认/);
-  assert.throws(() => e.normalizeProposal({ ...input, steps: [{ ...input.steps[0], methodId: 'staggered-did' }] }, scope), /尚无/);
-  assert.throws(() => e.normalizeProposal(input, { ...scope, attachments: [attachment, attachment] }), /唯一/);
+  assert.throws(() => e.normalizeProposal({ ...input, steps: [{ ...input.steps[0], methodId: 'staggered-did' }] }, scope), error => error.code === 'METHOD_NOT_CONNECTED');
+  assert.equal(e.normalizeProposal(input, { ...scope, attachments: [attachment, attachment] }).attachment.id, 'f');
+  const previousVersion = { ...attachment, id: 'old', importedAt: '2025-01-01T00:00:00Z' };
+  const latestVersion = { ...attachment, id: 'new', importedAt: '2026-01-01T00:00:00Z' };
+  assert.equal(e.normalizeProposal(input, { ...scope, attachments: [previousVersion, latestVersion] }).attachment.id, 'new');
   assert.throws(() => e.approvePlan(pending, { id: pending.id, revision: 9 }, scope), /版本/);
   assert.throws(() => e.approvePlan(pending, { id: pending.id, revision: 1 }, { ...scope, projectId: 'other' }), /当前/);
   const approved = e.approvePlan(pending, { id: pending.id, revision: 1 }, scope);
@@ -30,7 +41,7 @@ try {
   assert.equal(result.projectId, 'p');
   assert.throws(() => parse({ ...value, stepId: 'a9' }), /不一致/);
   assert.throws(() => parse({ ...value, tables: [] }), /结果表/);
-  assert.throws(() => parse({ ...value, tables: [{ ...value.tables[0], rows: [['x']] }] }), /行列/);
+  assert.throws(() => parse({ ...value, tables: [{ ...value.tables[0], rows: [['x']] }] }), /第 1 张表「OLS回归」第 1 行有 1 个单元格，表头有 2 列/);
   assert.throws(() => e.parseResult('done', { plan: approved, step: approved.steps[0] }), /结构化/);
   const review = { ...approved, status: 'results-review', results: [result] };
   const writing = e.proposeWriting(review, { title: '实证分析', task: '如实报告关联与限制', sections: ['模型设定', '回归结果'], lengthRequirement: '1100字' });

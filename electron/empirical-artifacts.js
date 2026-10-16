@@ -26,6 +26,7 @@ function artifactList(plan) {
     return [
       ...(result.tables || []).map((table, index) => ({ ...base, kind: 'table', index, name: table.title || `${label}结果表` })),
       ...(result.files || []).map((file, index) => ({ ...base, kind: 'image', index, name: path.basename(file) })),
+      ...(result.dataFiles || []).map((file, index) => ({ ...base, kind: 'data', index, name: path.basename(file) })),
       ...(result.code ? [{ ...base, kind: 'code', index: 0, name: `${label} · analysis_script.py` }] : []),
       { ...base, kind: 'json', index: 0, name: `${label} · analysis-result.json` },
     ];
@@ -39,6 +40,7 @@ function artifactFile(plan, selection, rootPath) {
   const result = plan.results.find(item => item.stepId === artifact.stepId);
   let data, extension;
   if (artifact.kind === 'image') { data = chartBytes(result.files[artifact.index], rootPath); extension = 'png'; }
+  else if (artifact.kind === 'data') { data = dataBytes(result.dataFiles[artifact.index], rootPath, result.preparedData?.sha256); extension = 'csv'; }
   else if (artifact.kind === 'table') {
     // Prevent spreadsheet formula execution when a table is opened in Excel.
     const cell = value => { let text = value == null ? '' : String(value); if (typeof value === 'string' && /^[\s]*[=+\-@]/.test(text)) text = "'" + text; return '"' + text.replace(/"/g, '""') + '"'; };
@@ -50,4 +52,20 @@ function artifactFile(plan, selection, rootPath) {
   return { data, extension, name: name.endsWith('.' + extension) ? name : `${name}.${extension}` };
 }
 
-module.exports = { resultVersion, chartBytes, artifactList, artifactFile };
+function dataBytes(file, rootPath, expectedHash) {
+  const real = fs.realpathSync(file), root = fs.realpathSync(rootPath), stat = fs.lstatSync(file);
+  if (!real.toLowerCase().startsWith((root + path.sep).toLowerCase()) || stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || path.extname(real).toLowerCase() !== '.csv' || stat.size > 50 * 1024 * 1024) throw new Error('清洗数据路径无效');
+  const bytes = fs.readFileSync(real);
+  if (!expectedHash || require('node:crypto').createHash('sha256').update(bytes).digest('hex') !== expectedHash) throw new Error('清洗数据已变化，请重新准备数据');
+  return bytes;
+}
+
+async function artifactWordTable(project, table, basename) {
+  if (!table || !Array.isArray(table.columns) || !Array.isArray(table.rows)) throw new Error('结果表格无效');
+  const { buildAcademicDocx } = require('./word-export');
+  const esc = value => String(value == null ? '—' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const html = `<p class="table-title">${esc(table.title || '分析结果表')}</p><table><thead><tr>${table.columns.map(value => `<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${table.rows.map(row => `<tr>${row.map(value => `<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p class="table-note">注：数据来自本项目已确认的分析步骤，请核对变量单位、样本口径与显著性标记。</p>`;
+  return { data: await buildAcademicDocx(project, { title: table.title || '分析结果表', content: html }), extension: 'docx', name: `${basename.replace(/\.csv$/i, '')}.docx` };
+}
+
+module.exports = { resultVersion, chartBytes, dataBytes, artifactList, artifactFile, artifactWordTable };

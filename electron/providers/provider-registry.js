@@ -1,4 +1,5 @@
 const { createOpenAIStreamParser } = require('../stream-parser');
+const { apiFetch } = require('./api-transport');
 
 const ENDING_PATH = '/chat/completions';
 
@@ -21,7 +22,8 @@ const DEFAULT_PROVIDERS = {
   openrouter: { label: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1/chat/completions', model: 'openai/gpt-4.1-mini', protocol: 'openai-compatible' },
   anthropic: { label: 'Claude / Anthropic', endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-sonnet-4-6', protocol: 'anthropic-messages' },
   hunyuan: { label: '腾讯混元 / HY', endpoint: 'https://api.hunyuan.cloud.tencent.com/v1/chat/completions', model: 'hunyuan-turbos-latest', protocol: 'openai-compatible' },
-  custom: { label: '自定义 OpenAI 兼容接口', endpoint: 'http://127.0.0.1:8000/v1/chat/completions', model: 'custom-model', protocol: 'openai-compatible' },
+  // Kept only so existing settings/key slots can be read without remapping them.
+  custom: { label: '自定义 OpenAI 兼容接口（已停用）', endpoint: 'http://127.0.0.1:8000/v1/chat/completions', model: 'custom-model', protocol: 'openai-compatible' },
 };
 
 class AnthropicAdapter {
@@ -29,7 +31,7 @@ class AnthropicAdapter {
   async createResponse(apiKey, messages, options = {}) {
     const endpoint = options.endpoint || this.definition.endpoint;
     require('../agent-api-config').validateApiUrl(endpoint);
-    const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: options.signal,
+    const response = await apiFetch(endpoint, { method: 'POST', redirect: 'error', signal: options.signal,
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: options.model || this.definition.model, max_tokens: options.maxTokens || 8192,
         system: messages.filter(m => m.role === 'system').map(m => m.content).join('\n'),
@@ -99,7 +101,7 @@ class OpenAiCompatibleAdapter {
     const model = options.model || this.definition.model;
     let response;
     try {
-      response = await fetch(endpoint, {
+      response = await apiFetch(endpoint, {
         redirect: 'error',
         method: 'POST',
         headers: { Authorization: `Bearer ${String(apiKey || '').trim()}`, 'Content-Type': 'application/json' },
@@ -127,12 +129,12 @@ class OpenAiCompatibleAdapter {
 class ProviderRegistry {
   constructor(definitions = DEFAULT_PROVIDERS) {
     this.definitions = definitions;
-    this.adapters = new Map(Object.entries(definitions).map(([id, definition]) => [id, definition.protocol === 'anthropic-messages' ? new AnthropicAdapter(definition) : new OpenAiCompatibleAdapter(definition)]));
+    this.adapters = new Map(Object.entries(definitions).filter(([id]) => id !== 'custom').map(([id, definition]) => [id, definition.protocol === 'anthropic-messages' ? new AnthropicAdapter(definition) : new OpenAiCompatibleAdapter(definition)]));
   }
 
   has(id) { return this.adapters.has(id); }
   getDefinition(id) { return this.definitions[id] || this.definitions.deepseek; }
-  getAdapter(id) { return this.adapters.get(id) || this.adapters.get('deepseek'); }
+  getAdapter(id) { if(id==='custom')throw new Error('本期已停用自定义中转站接口，请选择受支持的服务商。');return this.adapters.get(id) || this.adapters.get('deepseek'); }
   async complete(id, apiKey, messages, options) { return this.getAdapter(id).createResponse(apiKey, messages, options); }
   async stream(id, apiKey, messages, onDelta, options) { return this.getAdapter(id).createStream(apiKey, messages, onDelta, options); }
 }

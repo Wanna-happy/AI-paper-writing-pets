@@ -1,0 +1,62 @@
+const {app,BrowserWindow}=require('electron');
+const path=require('node:path'),fs=require('node:fs');
+const root=path.resolve(__dirname,'..'),out=path.join(root,'.ui-smoke','writing-workbench-20261016');app.setPath('userData',path.join(out,'profile'));
+app.whenReady().then(async()=>{
+ const win=new BrowserWindow({show:false,width:1540,height:1000,webPreferences:{preload:path.join(__dirname,'ui-smoke-preload.cjs'),contextIsolation:true,sandbox:true,backgroundThrottling:false}});require('../electron/app-security').secureWindow(win,root);fs.mkdirSync(out,{recursive:true});
+ win.webContents.on('console-message',event=>{if(event.level==='error')console.error(event.message);});
+ const run=code=>win.webContents.executeJavaScript(code),capture=async name=>{await win.webContents.capturePage();await new Promise(r=>setTimeout(r,180));fs.writeFileSync(path.join(out,name+'.png'),(await win.webContents.capturePage()).toPNG());};
+ try{
+ await win.loadFile(path.join(root,'src/feed.html'));
+ await run(`(async()=>{for(let i=0;i<80&&!document.querySelector('.message-actions button');i++)await new Promise(r=>setTimeout(r,50));openDraftEditor(activeProject().drafts[0]);})()`);
+ await run(`{
+ const before='<h1>完整文章标题</h1><p>开篇内容保持原样。</p><p>中段需要清晰表达😀。</p><table><tbody><tr><td>数据表保留</td></tr></tbody></table><p>全文末尾同样保留。</p>';
+ const after=before.replace('需要清晰','应当准确').replace('全文末尾','文章末尾');
+ const {article}=WritingWorkbench.trackedDocument(before,after);
+ const old=article.cloneNode(true);for(const x of old.querySelectorAll('ins'))x.remove();
+ const current=article.cloneNode(true);for(const x of current.querySelectorAll('del'))x.remove();
+ const text=html=>{const b=document.createElement('div');b.innerHTML=html;return b.textContent;};
+ if(old.textContent!==text(before)||current.textContent!==text(after))throw new Error('全文修订标记不能重建前后稿');
+ if(article.querySelector('table del'))throw new Error('下一段删除标记落入表格');
+ if(!article.querySelector('h1')||!article.querySelector('table')||!article.textContent.includes('开篇内容保持原样。')||!article.textContent.includes('同样保留。'))throw new Error('全文结构丢失');
+ const prose=document.createElement('div');prose.innerHTML=before;const range=document.createRange();range.selectNodeContents(prose.querySelectorAll('p')[1]);
+ const proposal=WritingWorkbench.selectionDocument({prose,range},'<p>中段改为准确表达。</p>');
+ if(!proposal.includes('全文末尾同样保留')||proposal.includes('<p><p>'))throw new Error('段落替换损坏全文');
+ window.fullArticleReview=WritingWorkbench.reviewReplacement(before,after);true;
+ }`);
+ await run(`{const panel=document.getElementById('rewrite-review');if(panel.querySelector('header')||!panel.textContent.includes('完整文章标题')||!panel.textContent.includes('同样保留'))throw new Error('未直接显示全文');const zoom=document.querySelector('#preview-document-controls select');zoom.value='150';zoom.dispatchEvent(new Event('change'));if(panel.querySelector('article').style.zoom!=='1.5')throw new Error('全文修订缩放无效');}`);
+ await capture('00-full-article-tracking');
+ await run(`(async()=>{document.querySelector('#rewrite-review .workbench-actions button').click();await fullArticleReview;})()`);
+ await run(`window.testButton=(selector,label)=>{const b=[...document.querySelectorAll(selector+' button')].find(b=>b.textContent===label);if(!b)throw new Error('缺少按钮 '+label);return b;};window.testClick=async(selector,label)=>{const b=testButton(selector,label);b.click();await b.actionPromise;};window.testSelect=()=>{const p=document.querySelector('.artifact-paper .assistant-prose p'),r=document.createRange();r.selectNodeContents(p);const s=window.getSelection();s.removeAllRanges();s.addRange(r);};window.testWait=async predicate=>{for(let i=0;i<80&&!predicate();i++)await new Promise(r=>setTimeout(r,20));if(!predicate())throw new Error('界面状态未更新');};window.testOriginal=activeProject().drafts[0].content;testSelect();window.testEdit=applyLocalSkill('polish');true;`);
+ await run(`testWait(()=>!!document.getElementById('rewrite-review'))`);await capture('01-rewrite-review');
+ await run(`(async()=>{testButton('#rewrite-review','取消').click();await testEdit;if(activeProject().drafts[0].content!==testOriginal)throw new Error('取消后改变原稿');testSelect();window.testEdit=applyLocalSkill('polish');await testWait(()=>!!document.getElementById('rewrite-review'));testButton('#rewrite-review','接受修改').click();await testEdit;if(!activeProject().drafts[0].content.includes('应以清晰'))throw new Error('接受修改未保存');})()`);
+ await capture('02-editor');
+ await run(`(async()=>{await testClick('.manuscript-tools','撤销上次修改');await testWait(()=>activeProject().drafts[0].content===testOriginal);testButton('.manuscript-tools','编辑正文').click();const p=document.querySelector('.artifact-paper .assistant-prose');p.innerHTML+='<p>手动编辑新增内容</p>';p.dispatchEvent(new Event('input'));closeEmpiricalPreview();if(el['empirical-preview'].hidden)throw new Error('未保存编辑被关闭');testButton('.manuscript-tools','取消编辑').click();if(activeProject().drafts[0].content!==testOriginal)throw new Error('取消编辑污染稿件');testButton('.manuscript-tools','编辑正文').click();const q=document.querySelector('.artifact-paper .assistant-prose');q.innerHTML+='<p>手动编辑新增内容</p>';q.dispatchEvent(new Event('input'));await testClick('.manuscript-tools','保存修改');await testWait(()=>activeProject().drafts[0].content.includes('手动编辑新增内容'));await testWait(()=>!document.querySelector('[data-editing-dirty]'));if([...document.querySelectorAll('button')].some(b=>b.textContent==='历史版本'))throw new Error('历史版本入口仍在');ProjectExperience.render();switchView('outcomes');})()`);
+ await capture('04-outcomes');
+ await run(`(async()=>{const doc={id:'search-document',name:'无关键词.txt',extension:'.txt',size:50,status:'parsed',text:'这是正文独有检索词',tags:['理论'],author:'合成作者'};activeProject().documents.push(doc);switchView('library');el['library-filter'].value='正文独有';renderLibrary();if(!el['library-list'].textContent.includes('无关键词'))throw new Error('正文检索失败');el['library-filter'].value='不存在';renderLibrary();if(!el['library-list'].textContent.includes('未找到匹配'))throw new Error('搜索空态误导');openProjectDialog();if(el['project-type'].value!=='课程论文'||document.querySelector('.project-optional').open)throw new Error('项目细节未渐进展示');el['project-dialog'].close();openPaperPreview(activeProject().drafts[0]);window.testExport=exportDraft('p',activeProject().drafts[0]);await testWait(()=>!!document.querySelector('.export-review'));})()`);await capture('05-export');
+ await run(`(async()=>{testButton('.export-review','返回检查').click();await testExport;})()`);
+ await run(`(async()=>{
+ const draft=activeProject().drafts[0];openPaperPreview(draft);
+ if(!document.querySelector('.citation-issue').textContent.includes('E1'))throw new Error('引用问题未列出');
+ testButton('.citation-issue','定位引用').click();if(!document.querySelector('.draft-evidence-list details[open]'))throw new Error('引用问题不能定位证据');
+ let zoom=document.querySelector('#preview-document-controls select');zoom.value='125';zoom.dispatchEvent(new Event('change'));closeEmpiricalPreview();openPaperPreview(draft);
+ if(document.querySelector('#preview-document-controls select').value!=='125')throw new Error('重新打开丢失缩放');
+ const project=activeProject();project.empiricalPlans={c:{id:'analysis-plan',revision:1,researchQuestion:'合成分析',steps:[{id:'a1',label:'模型拟合'}],results:[{stepId:'a1',tables:[{title:'回归表'}],files:['synthetic.png'],dataFiles:['prepared.csv'],code:'print(1)'}]}};
+ ProjectExperience.render();switchView('outcomes');const category=document.querySelector('[aria-label="成果类型"]');category.value='table';category.dispatchEvent(new Event('change'));
+ if(document.querySelectorAll('.outcome-file').length!==1||!document.querySelector('.outcomes-list').textContent.includes('回归表'))throw new Error('成果分类不正确');
+ await testClick('.outcome-file','查看文件');if(!document.querySelector('.artifact-table'))throw new Error('成果文件不能直接预览');
+ project.documents.push({id:'other-document',name:'其他资料.txt',extension:'.txt',size:33,status:'parsed',author:'第二作者',year:'2025',tags:['实证'],text:'其他正文'});
+ project.documents.push({...project.documents[0],id:'duplicate-document'});switchView('library');testButton('.library-filters','清除筛选').click();renderLibrary();
+ if(!document.querySelector('.duplicate-notice'))throw new Error('未提示可能重复资料');
+ const author=document.querySelector('[data-filter="author"]');author.value='第二作者';author.dispatchEvent(new Event('change'));
+ if(el['library-list'].children.length!==1||!el['library-list'].textContent.includes('其他资料'))throw new Error('资料作者筛选失败');
+ testButton('.library-filters','清除筛选').click();
+ await testCurrentApi();if(!el['api-connection-badge'].classList.contains('is-connected'))throw new Error('测试连接状态不明确');
+ el['api-model'].value+='-changed';el['api-model'].dispatchEvent(new Event('input'));if(el['api-connection-badge'].classList.contains('is-connected')||!el['api-status'].textContent.includes('尚未保存'))throw new Error('修改配置仍沿用旧连接状态');
+ })()`);
+ await run(`document.querySelector('.library-filters').open=true;true;`);await capture('07-library-filters');
+ win.setSize(1024,800);await run(`ProjectExperience.render();switchView('outcomes');true;`);await capture('08-narrow-outcomes');
+ await run(`{const page=document.querySelector('.outcomes-view');if(page.scrollWidth>page.clientWidth+2)throw new Error('窄窗口成果界面溢出');}`);
+ await run(`(async()=>{workspace=await window.petAPI.addTestProject({id:'p2',title:'第二个独立项目',documents:[{id:'p2-source',name:'第二项目专属资料.txt',extension:'.txt',status:'parsed',size:20,text:'第二项目证据'}],drafts:[{id:'p2-draft',title:'第二项目稿件',conversationId:'c2',content:'<p>第二项目正文</p>'}],conversations:[{id:'c2',title:'第二对话'}],activeConversationId:'c2'});ProjectExperience.render();switchView('outcomes');await selectProject('p2');if(!document.querySelector('[data-view-panel="outcomes"].is-active'))throw new Error('切项目丢失成果上下文');if(!document.querySelector('.outcomes-list').textContent.includes('第二项目稿件')||document.querySelector('.outcomes-list').textContent.includes('论文背景'))throw new Error('成果跨项目混用');switchView('library');if(!el['library-list'].textContent.includes('第二项目专属资料')||el['library-list'].textContent.includes('无关键词'))throw new Error('资料跨项目混用');if(!el['empirical-preview'].hidden)throw new Error('右侧残留其他项目文件');ProjectExperience.editMetadata(activeProject().documents[0]);const input=document.querySelector('.metadata-editor input');input.value='已校正文献作者';document.querySelector('.metadata-editor form').requestSubmit();await testWait(()=>!document.querySelector('.metadata-editor'));if(!activeProject().documents[0].author.includes('已校正'))throw new Error('文献信息未保存');await selectProject('p');if(!document.querySelector('[data-view-panel="library"].is-active')||el['library-list'].textContent.includes('第二项目专属资料'))throw new Error('资料库切回失败');})()`);
+ console.log(JSON.stringify({rewriteCancel:true,rewriteAccept:true,undo:true,manualSave:true,unsavedGuard:true,historyUIRemoved:true,fullArticleTracking:true,outcomes:true,artifactCategories:true,artifactDirectPreview:true,libraryFilters:true,metadataSave:true,duplicateHints:true,citationLocate:true,zoomMemory:true,apiDirtyState:true,narrowLayout:true,bodySearch:true,searchEmptyState:true,progressiveProject:true,exportReview:true,projectIsolation:true,noManuscriptModals:true,screenshots:out}));win.destroy();app.exit(0);
+ }catch(error){console.error(error);await capture('failure');win.destroy();app.exit(1);}
+});

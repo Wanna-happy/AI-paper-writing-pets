@@ -122,6 +122,12 @@ const SKILL_SECTION_IDS = new Map([
   ['conclusion-writing', 'conclusion'],
 ]);
 
+// External identifiers participate in the existing chapter/retrieval skeleton.
+const { LEGACY_IDS, CORE_SKILL_ID } = require('./skills/research-adapter');
+for (const [oldId, section] of [...SKILL_SECTION_IDS]) {
+  if (LEGACY_IDS[oldId] && LEGACY_IDS[oldId] !== CORE_SKILL_ID) SKILL_SECTION_IDS.set(LEGACY_IDS[oldId], section);
+}
+
 const WRITING_MODE_RULES = [
   {
     id: 'social-science',
@@ -222,7 +228,8 @@ function sectionFromSkillIds(skillIds = [], outputContract = {}) {
 
 function buildResearchWorkflow(project, task, skillIds = [], outputContract = {}) {
   outputContract = outputContract || {}; // 默认参数只对 undefined 生效；兜底防空
-  const section = skillIds.length ? sectionFromSkillIds(skillIds, outputContract) : detectSection(task);
+  const selectedSection = skillIds.length ? sectionFromSkillIds(skillIds, outputContract) : GENERAL_RULE;
+  const section = selectedSection.id === 'general' ? detectSection(task) : selectedSection;
   const writingMode = detectWritingMode(project, '');
   const context = [projectDomains(project), project?.title, project?.goal, task].filter(Boolean).join(' ');
   const queries = uniqueQueries([

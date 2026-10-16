@@ -11,7 +11,7 @@ using System.Threading;
 using System.Web.Script.Serialization;
 
 // Trusted host launcher. Only the Python child runs inside the LPAC.
-// No network capabilities; isolated identity per run; explicit handle inheritance.
+// Optional internetClient capability; isolated identity per run; explicit handle inheritance.
 public static class SandboxRunner {
     [StructLayout(LayoutKind.Sequential)] struct SECURITY_ATTRIBUTES { public int length; public IntPtr descriptor; [MarshalAs(UnmanagedType.Bool)] public bool inherit; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct STARTUPINFO {
@@ -59,6 +59,15 @@ public static class SandboxRunner {
     static IntPtr Allocate<T>(T value) { IntPtr p = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(T))); Marshal.StructureToPtr(value, p, false); return p; }
     static void Attribute(IntPtr list, long id, IntPtr value, int size) { Check(UpdateProcThreadAttribute(list, 0, new IntPtr(id), value, new IntPtr(size), IntPtr.Zero, IntPtr.Zero)); }
     static string Quote(string value) { return "\"" + value.Replace("\"", "\\\"") + "\""; }
+    static IntPtr CapabilitySid(string name, List<IntPtr> localAllocations) {
+        IntPtr groups, capabilitySids; uint groupCount, capabilityCount;
+        Check(DeriveCapabilitySidsFromName(name, out groups, out groupCount, out capabilitySids, out capabilityCount));
+        for (int i=0; i<groupCount; i++) localAllocations.Add(Marshal.ReadIntPtr(groups, i * IntPtr.Size));
+        for (int i=0; i<capabilityCount; i++) localAllocations.Add(Marshal.ReadIntPtr(capabilitySids, i * IntPtr.Size));
+        localAllocations.Add(groups); localAllocations.Add(capabilitySids);
+        if (capabilityCount < 1) throw new InvalidOperationException("Missing capability SID: " + name);
+        return Marshal.ReadIntPtr(capabilitySids);
+    }
     static void Grant(string folder, SecurityIdentifier sid, FileSystemRights rights, bool inherit, bool remove) {
         using (Mutex mutex = new Mutex(false, "Local\\PaperPetSandboxAclV1")) {
             try { mutex.WaitOne(); } catch (AbandonedMutexException) { }
@@ -104,6 +113,7 @@ public static class SandboxRunner {
         string profile = "PaperPet.Analysis." + Guid.NewGuid().ToString("N"), runtime = null;
         SecurityIdentifier identity = null;
         bool runtimeGranted = false, started = false;
+        string stage = "read-config";
         int exit = 1;
         Dictionary<string,object> result = new Dictionary<string,object>();
         try {
@@ -113,17 +123,21 @@ public static class SandboxRunner {
             string input = Path.GetFullPath((string)config["input"]), output = Path.GetFullPath((string)config["output"]), control = Path.GetFullPath((string)config["control"]);
             int timeout = Math.Max(100, Math.Min(600000, Convert.ToInt32(config["timeoutMs"])));
             long memory = Math.Max(64, Math.Min(2048, Convert.ToInt64(config["memoryMb"]))) * 1024 * 1024;
+            bool allowNetwork = config.ContainsKey("allowNetwork") && config["allowNetwork"] is bool && (bool)config["allowNetwork"];
             string executable = Path.Combine(runtime, "python.exe"), script = Path.Combine(input, "analysis_script.py");
             if (!File.Exists(executable) || !File.Exists(script)) throw new FileNotFoundException("Sandbox runtime/input missing");
+            stage = "create-app-container";
             int hr = CreateAppContainerProfile(profile, profile, "Isolated paper analysis", IntPtr.Zero, 0, out sid);
             if (hr != 0) Marshal.ThrowExceptionForHR(hr);
             identity = new SecurityIdentifier(sid);
+            stage = "grant-file-access";
             Grant(runtime, identity, FileSystemRights.ReadAndExecute, true, false); runtimeGranted = true;
             Grant(Path.GetDirectoryName(input), identity, FileSystemRights.Traverse | FileSystemRights.Synchronize, false, false);
             Grant(input, identity, FileSystemRights.ReadAndExecute, true, false);
             Grant(output, identity, FileSystemRights.Modify, true, false);
             LowIntegrity(output);
 
+            stage = "create-job";
             job = CreateJobObjectW(IntPtr.Zero, null); Check(job != IntPtr.Zero);
             EXTENDED_LIMITS limits = new EXTENDED_LIMITS();
             limits.basic.flags = 0x2000 | 0x200 | 0x100 | 0x8 | 0x400;
@@ -134,26 +148,33 @@ public static class SandboxRunner {
             IntPtr uiPtr = Allocate((uint)0xFF); allocations.Add(uiPtr);
             Check(SetInformationJobObject(job, 4, uiPtr, 4));
 
+            stage = "initialize-attributes";
             IntPtr bytesNeeded = IntPtr.Zero;
             InitializeProcThreadAttributeList(IntPtr.Zero, 4, 0, ref bytesNeeded);
             attributes = Marshal.AllocHGlobal(bytesNeeded);
             Check(InitializeProcThreadAttributeList(attributes, 4, 0, ref bytesNeeded));
             SECURITY_CAPABILITIES caps = new SECURITY_CAPABILITIES(); caps.sid = sid;
-            IntPtr groups, capabilitySids; uint groupCount, capabilityCount;
-            Check(DeriveCapabilitySidsFromName("registryRead", out groups, out groupCount, out capabilitySids, out capabilityCount));
-            for (int i=0; i<groupCount; i++) localAllocations.Add(Marshal.ReadIntPtr(groups, i * IntPtr.Size));
-            for (int i=0; i<capabilityCount; i++) localAllocations.Add(Marshal.ReadIntPtr(capabilitySids, i * IntPtr.Size));
-            localAllocations.Add(groups); localAllocations.Add(capabilitySids);
-            SID_AND_ATTRIBUTES registryCapability = new SID_AND_ATTRIBUTES(); registryCapability.sid = Marshal.ReadIntPtr(capabilitySids); registryCapability.attributes = 4;
-            IntPtr registryCapabilityPtr = Allocate(registryCapability); allocations.Add(registryCapabilityPtr);
-            caps.capabilities = registryCapabilityPtr; caps.count = 1;
+            stage = "derive-capability-sid";
+            int capCount = allowNetwork ? 2 : 1;
+            int capSize = Marshal.SizeOf(typeof(SID_AND_ATTRIBUTES));
+            IntPtr capabilityList = Marshal.AllocHGlobal(capSize * capCount); allocations.Add(capabilityList);
+            SID_AND_ATTRIBUTES registryCapability = new SID_AND_ATTRIBUTES(); registryCapability.sid = CapabilitySid("registryRead", localAllocations); registryCapability.attributes = 4;
+            Marshal.StructureToPtr(registryCapability, capabilityList, false);
+            if (allowNetwork) {
+                SID_AND_ATTRIBUTES internetCapability = new SID_AND_ATTRIBUTES(); internetCapability.sid = CapabilitySid("internetClient", localAllocations); internetCapability.attributes = 4;
+                Marshal.StructureToPtr(internetCapability, IntPtr.Add(capabilityList, capSize), false);
+            }
+            caps.capabilities = capabilityList; caps.count = (uint)capCount;
             IntPtr capsPtr = Allocate(caps); allocations.Add(capsPtr);
+            stage = "set-security-capabilities";
             Attribute(attributes, 0x20009, capsPtr, Marshal.SizeOf(typeof(SECURITY_CAPABILITIES)));
             IntPtr lpacPtr = Allocate((uint)1); allocations.Add(lpacPtr);
+            stage = "set-lpac";
             Attribute(attributes, 0x2000F, lpacPtr, 4);
             // Disable extension points and images from remote devices. Job UI limits
             // restrict UI operations without disabling Windows graphics DLL loading.
             IntPtr mitigationPtr = Allocate(0x100000000UL | 0x10000000000000UL); allocations.Add(mitigationPtr);
+            stage = "set-mitigation";
             Attribute(attributes, 0x20007, mitigationPtr, 8);
 
             SECURITY_ATTRIBUTES sa = new SECURITY_ATTRIBUTES(); sa.length = Marshal.SizeOf(typeof(SECURITY_ATTRIBUTES)); sa.inherit = true;
@@ -164,6 +185,7 @@ public static class SandboxRunner {
             }
             IntPtr handleList = Marshal.AllocHGlobal(IntPtr.Size * handles.Count); allocations.Add(handleList);
             for (int i=0; i<handles.Count; i++) Marshal.WriteIntPtr(handleList, i * IntPtr.Size, handles[i]);
+            stage = "set-handle-list";
             Attribute(attributes, 0x20002, handleList, IntPtr.Size * handles.Count);
 
             Dictionary<string,string> env = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
@@ -181,9 +203,11 @@ public static class SandboxRunner {
             environment = Marshal.StringToHGlobalUni(block.ToString());
             STARTUPINFOEX startup = new STARTUPINFOEX(); startup.info.cb = Marshal.SizeOf(typeof(STARTUPINFOEX)); startup.attributes = attributes;
             startup.info.flags = 0x100; startup.info.stdin = handles[0]; startup.info.stdout = handles[1]; startup.info.stderr = handles[2];
+            stage = "create-python-process";
             Check(CreateProcessW(executable, new StringBuilder(Quote(executable) + " -I -B -X utf8 " + Quote(script)), IntPtr.Zero, IntPtr.Zero, true,
                 0x80000 | 0x4 | 0x400 | 0x08000000, environment, output, ref startup, out process));
             started = true;
+            stage = "assign-job";
             Check(AssignProcessToJobObject(job, process.process));
             IntPtr token; Check(OpenProcessToken(process.process, 8, out token));
             try {
@@ -202,13 +226,13 @@ public static class SandboxRunner {
                 if (reason != null) { Check(TerminateJobObject(job, 1)); WaitForSingleObject(process.process, 5000); break; }
             }
             uint code; Check(GetExitCodeProcess(process.process, out code));
-            result["backend"] = "windows-lpac-job"; result["appContainer"] = true; result["networkCapabilities"] = 0;
-            result["capabilities"] = new string[] { "registryRead" };
+            result["backend"] = "windows-lpac-job"; result["appContainer"] = true; result["networkCapabilities"] = allowNetwork ? 1 : 0;
+            result["capabilities"] = allowNetwork ? new string[] { "registryRead", "internetClient" } : new string[] { "registryRead" };
             result["exitCode"] = code; result["reason"] = reason; result["stdout"] = ReadBounded(stdoutPath); result["stderr"] = ReadBounded(stderrPath);
             result["memoryMb"] = memory / 1024 / 1024; result["processLimit"] = 1;
             exit = 0;
         } catch (Exception error) {
-            result["backend"] = "windows-lpac-job"; result["error"] = "Sandbox setup/execution failed: " + error.Message;
+            result["backend"] = "windows-lpac-job"; result["error"] = "Sandbox setup/execution failed at " + stage + ": " + error.Message;
         } finally {
             if (started && process.process != IntPtr.Zero) { TerminateProcess(process.process, 1); WaitForSingleObject(process.process, 5000); }
             if (job != IntPtr.Zero) { TerminateJobObject(job, 1); CloseHandle(job); }

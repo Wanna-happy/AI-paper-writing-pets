@@ -1,3 +1,4 @@
+const interactionBroker = new (require('./agent/interaction-broker').InteractionBroker)();
 const {
   app,
   BrowserWindow,
@@ -8,6 +9,8 @@ const {
   ipcMain,
   dialog,
   shell,
+  clipboard,
+  ClipboardItem,
 } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -202,10 +205,11 @@ function getAgentOrchestrator(event) {
   });
   return new AgentOrchestrator({
     workspaceStore,
+    waitForInteraction: args => interactionBroker.wait({ ...args, owner: event.sender.id }),
     ragStore,
     providerRegistry,
     toolRegistry,
-    skillRuntime: new SkillRuntime(path.join(__dirname, '../assets/skills')),
+    skillRuntime: new SkillRuntime(path.join(__dirname, '../assets/research-skills')),
     loadSettings,
     buildConversationFileContext,
     postProcessContent: postProcessAgentContent,
@@ -569,6 +573,9 @@ handleApp('choose-conversation-files', async (_event, projectId, folder = false)
   return require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths: result.filePaths });
 });
 handleApp('conversation-files-import', (_event, projectId, paths) => require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths }));
+handleApp('uploaded-file-preview', (_event, projectId, conversationId, id, page = 1, sheet = 0) => require('./upload-preview').previewUpload({ store: workspaceStore, projectId, conversationId, id, page, sheet }));
+handleApp('file-bytes-preview', (_event, payload) => require('./upload-preview').previewEncodedBytes(payload));
+handleApp('file-bytes-search',(_event,payload)=>require('./upload-preview').searchEncodedDocument(payload));
 
 handleApp('workspace-load', () => workspaceStore.loadWorkspace());
 handleApp('project-create', (_event, input) => workspaceStore.createProject(input));
@@ -577,11 +584,16 @@ handleApp('conversation-create', (_event, projectId, input) => workspaceStore.cr
 handleApp('conversation-delete', (_event, projectId, conversationId) => workspaceStore.deleteConversation(projectId, conversationId));
 handleApp('conversation-set-active', (_event, projectId, conversationId) => workspaceStore.setActiveConversation(projectId, conversationId));
 handleApp('project-update', (_event, projectId, partial) => {
-  if (['empiricalPlans', 'projectFiles', 'removedAttachmentIds'].some(key => key in (partial || {}))) throw new Error('方案和项目文件只能由专门流程更新');
+  if (['empiricalPlans', 'projectFiles', 'removedAttachmentIds', 'dataPreparations', 'confirmedAnalysisChoices', 'confirmedDecisions'].some(key => key in (partial || {}))) throw new Error('方案和项目文件只能由专门流程更新');
   return workspaceStore.updateProject(projectId, partial);
 });
 handleApp('project-set-active', (_event, projectId) => workspaceStore.setActiveProject(projectId));
-handleApp('project-delete', (_event, projectId) => workspaceStore.deleteProject(projectId));
+handleApp('project-delete', async (_event, projectId) => {
+  const running = [...activeGenerationControllers.values()].filter(controller => controller.projectId === projectId);
+  for (const controller of running) controller.abort();
+  await Promise.allSettled(running.map(controller => controller.completion));
+  return workspaceStore.deleteProject(projectId);
+});
 handleApp('documents-import', async (_event, projectId, filePaths) => {
   sendPetReaction('review', '我在整理新资料，请稍等一下～');
   const result = await workspaceStore.importDocuments(projectId, filePaths);
@@ -614,13 +626,25 @@ handleApp('rag-rebuild', async (_event, projectId) => {
   return ragStore.getStatus(project);
 });
 handleApp('draft-save', (_event, projectId, draft) => workspaceStore.saveDraft(projectId, draft));
+handleApp('thesis-preview-assembled',(_event,projectId)=>{const project=workspaceStore.loadWorkspace().projects.find(p=>p.id===projectId);if(!project)throw new Error('项目不存在');return require('./thesis-controller').buildAssembledThesis(project);});
+handleApp('document-metadata-update',(_event,projectId,documentId,partial)=>workspaceStore.updateDocumentMetadata(projectId,documentId,partial));
+handleApp('project-backup',async(_event,projectId)=>{
+  const project=workspaceStore.loadWorkspace().projects.find(p=>p.id===projectId);if(!project)throw new Error('项目不存在');
+  const result=await dialog.showSaveDialog(workspaceWindow||mainWindow,{title:'备份项目（不含模型密钥）',defaultPath:`${project.title.replace(/[\\/:*?"<>|]/g,'_')}.paperpet`,filters:[{name:'论文宠物项目备份',extensions:['paperpet']}]});if(result.canceled)return {canceled:true};
+  const bytes=await require('./project-backup').createBackup(project,app.getPath('userData'));fs.writeFileSync(result.filePath,bytes);return {canceled:false};
+});
+handleApp('project-restore-backup',async()=>{
+  const result=await dialog.showOpenDialog(workspaceWindow||mainWindow,{title:'恢复为独立项目副本',properties:['openFile'],filters:[{name:'论文宠物项目备份',extensions:['paperpet']}]});if(result.canceled)return {canceled:true};
+  const project=await require('./project-backup').restoreBackup(fs.readFileSync(result.filePaths[0]),app.getPath('userData'));workspaceStore.addRestoredProject(project);return {canceled:false,projectId:project.id};
+});
 
 const agentApiService = createAgentApiService({ store: workspaceStore, loadSettings, saveSettings, providerRegistry });
 handleApp('agent-api-status', () => agentApiService.status());
-handleApp('agent-api-save', (_event, scenario, config, key, clear) => agentApiService.save(scenario, config, key, clear));
-handleApp('agent-api-test', (_event, scenario, config, key) => agentApiService.test(scenario, config, key));
+handleApp('agent-api-save', (_event, scenario, config, key, clear) => { if (config?.enabled && config.provider === 'custom') throw new Error('本期不提供自定义中转站接口。'); return agentApiService.save(scenario, config, key, clear); });
+handleApp('agent-api-test', (_event, scenario, config, key) => { if (config?.enabled && config.provider === 'custom') throw new Error('本期不提供自定义中转站接口。'); return agentApiService.test(scenario, config, key); });
 
 handleApp('api-save', (_event, config, apiKey) => {
+  if (config?.provider === 'custom' || config === 'custom') throw new Error('本期不提供自定义中转站接口。');
   const providerId = AI_PROVIDERS[config?.provider] ? config.provider : 'deepseek';
   const baseUrl = validateApiUrl(config?.baseUrl || AI_PROVIDERS[providerId].endpoint);
   const model = String(config?.model || AI_PROVIDERS[providerId].model).trim();
@@ -657,19 +681,19 @@ handleApp('api-reveal-key', (_event, providerId) => {
 async function getDataEnvironmentStatus() {
   try {
     const python = await findPythonExecutable(loadSettings());
-    const code = "import sys, importlib.util, json; print(json.dumps({'python': sys.executable, 'version': sys.version.split()[0], 'packages': {name: bool(importlib.util.find_spec(name)) for name in ('pandas','numpy','scipy','openpyxl','matplotlib')}}))";
+    const code = "import sys, importlib.util, json; print(json.dumps({'python': sys.executable, 'version': sys.version.split()[0], 'packages': {name: bool(importlib.util.find_spec(name)) for name in ('pandas','numpy','scipy','openpyxl','matplotlib','dtaidistance')}}))";
     const stdout = await runProcess(python.executable, [...python.prefix, '-I', '-c', code]);
     const status = JSON.parse(stdout.trim());
     status.source = python.source;
-    status.sandbox = getSandboxStatus();
-    status.ready = Object.values(status.packages).every(Boolean) && status.sandbox.available;
+    status.sandbox = getSandboxStatus(loadSettings().dataEnvironment?.networkEnabled === true);
+    status.ready = ['pandas', 'numpy', 'scipy', 'openpyxl', 'matplotlib'].every(name => status.packages[name]) && status.sandbox.available;
     if (!status.sandbox.available) status.error = status.sandbox.error;
-    status.installCommand = `\"${status.python}\" -m pip install pandas numpy scipy openpyxl matplotlib`;
+    status.installCommand = `\"${status.python}\" -m pip install pandas numpy scipy openpyxl matplotlib dtaidistance`;
     if (python.source === 'bundled') status.installCommand = '';
     return status;
   } catch (error) {
     const external = loadSettings().dataEnvironment?.runtimeMode === 'external';
-    return { ready: false, source: external ? 'external' : 'bundled', error: error.message, sandbox: getSandboxStatus(), packages: {}, installCommand: external ? 'python -m pip install pandas numpy scipy openpyxl matplotlib' : '' };
+    return { ready: false, source: external ? 'external' : 'bundled', error: error.message, sandbox: getSandboxStatus(loadSettings().dataEnvironment?.networkEnabled === true), packages: {}, installCommand: external ? 'python -m pip install pandas numpy scipy openpyxl matplotlib dtaidistance' : '' };
   }
 }
 
@@ -681,15 +705,21 @@ handleApp('draft-cancel', (_event, requestId) => {
 });
 
 // UC-SKILL-02 段落级应用 Skill：选中段落 → 润色/扩写/改实证风格，仅对该段重写。
-handleApp('draft-apply-skill', async (_event, projectId, { selectedText, selectedHtml, operation }) => {
+handleApp('draft-apply-skill', async (_event, projectId, { draftId, selectedText, selectedHtml, operation }) => {
   const workspace = workspaceStore.loadWorkspace();
   const project = workspace.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
+  const draft = project.drafts.find(item => item.id === draftId);
+  if (!draft) throw new Error('当前草稿不存在或不属于该项目');
   const text = String(selectedText || '').trim();
   if (!text) throw new Error('未选中内容，请先在草稿里选中一段文字。');
+  if (text.length > 20000 || String(selectedHtml || '').length > 30000) throw new Error('选区过大，请分段改写。');
   if (!['polish', 'expand', 'empirical'].includes(operation)) throw new Error('未知的局部操作。');
-  const skillRuntime = new SkillRuntime(path.join(__dirname, '../assets/skills'));
-  return applyLocalEdit({ skillRuntime, requestModel, project, selectedText: text, selectedHtml, operation });
+  const skillRuntime = new SkillRuntime(path.join(__dirname, '../assets/research-skills'));
+  const modelLayer = await import('./pi/model-layer.mjs');
+  const settings = loadSettings(), layer = modelLayer.createModelLayer(settings);
+  layer.getApiKey = scenario => resolveAgentKey(workspaceStore, settings, scenario);
+  return applyLocalEdit({ skillRuntime, requestModel: args => modelLayer.requestModel(layer, args), project, draft, selectedText: text, selectedHtml, operation });
 });
 
 handleApp('api-test', async (_event, config, apiKey) => {
@@ -699,6 +729,7 @@ handleApp('api-test', async (_event, config, apiKey) => {
     : (AI_PROVIDERS[config?.provider] ? config.provider : settings.api.provider);
   const baseUrl = typeof config === 'object' && config ? config.baseUrl : null;
   const model = typeof config === 'object' && config ? config.model : null;
+  if (providerId === 'custom') throw new Error('本期不提供自定义中转站接口。');
   const candidateUrl = normalizeBaseUrl(baseUrl || settings.api.baseUrl);
   const allowStoredKey = providerId === settings.api.provider && candidateUrl === normalizeBaseUrl(settings.api.baseUrl);
   const key = String(apiKey || (allowStoredKey ? workspaceStore.getApiKey('encrypted', providerId) : '') || '').trim();
@@ -706,6 +737,7 @@ handleApp('api-test', async (_event, config, apiKey) => {
   await providerRegistry.complete(providerId, key, [{ role: 'user', content: '只回复：连接成功' }], {
     temperature: 0,
     maxTokens: 8,
+    signal: AbortSignal.timeout(20000),
     endpoint: resolveEndpoint(baseUrl, getProvider(providerId).endpoint),
     ...(model ? { model } : {}),
   });
@@ -713,13 +745,35 @@ handleApp('api-test', async (_event, config, apiKey) => {
 });
 
 handleApp('data-environment-status', () => getDataEnvironmentStatus());
+handleApp('clipboard-write', async (_event, payload) => {
+  if (payload?.kind === 'image') {
+    const match = String(payload.dataUrl || '').match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match || match[1].length > 16 * 1024 * 1024) throw new Error('图片内容无效或过大');
+    const bytes = Buffer.from(match[1], 'base64');
+    if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('仅支持复制 PNG 图片');
+    const image = nativeImage.createFromBuffer(bytes);
+    if (image.isEmpty()) throw new Error('图片内容无法解码');
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([image.toPNG()], { type: 'image/png' }) })]);
+    if (!(await clipboard.has('image/png'))) throw new Error('系统剪贴板未接受图片，请稍后重试');
+    return { ok: true, format: 'png' };
+  } else {
+    const value = String(payload?.text || '');
+    if (value.length > 2_000_000) throw new Error('复制内容过大');
+    const html = typeof payload?.html === 'string' && payload.html.length <= 4_000_000 ? payload.html : '';
+    await clipboard.write([new ClipboardItem(html ? { 'text/plain': value, 'text/html': html } : { 'text/plain': value })]);
+    if (await clipboard.readText() !== value) throw new Error('系统剪贴板未接受复制内容，请稍后重试');
+    if (html && !(await clipboard.has('text/html'))) return { ok: true, format: 'text' };
+    return { ok: true, format: html ? 'html+text' : 'text' };
+  }
+});
+handleApp('empirical-plan-document-update', (_event, projectId, conversationId, reference, patch) => require('./agent/plan-document').updatePlanDocument({ store: workspaceStore, projectId, conversationId, reference, patch, resolveAttachment: resolveConversationAttachment }));
 handleApp('empirical-result-preview', (_event, projectId, conversationId, revision) => {
   const project = workspaceStore.loadWorkspace().projects.find(item => item.id === projectId);
   if (!project) throw new Error('项目不存在');
-  const { resultVersion, chartBytes } = require('./empirical-artifacts');
+  const { resultVersion, chartBytes, dataBytes } = require('./empirical-artifacts');
   const plan = resultVersion(project, conversationId, revision);
   const rootPath = path.join(app.getPath('userData'), 'analysis-runs', projectId);
-  const results = (plan.results || []).map(result => ({ ...result, charts: (result.files || []).map(file => {
+  const results = (plan.results || []).map(result => ({ ...result, preparedFiles: (result.dataFiles || []).map(file => {const bytes=dataBytes(file,rootPath,result.preparedData?.sha256);return {name:path.basename(file),text:bytes.toString('utf8'),preview:{name:path.basename(file),type:'spreadsheet',format:'.csv',dataBase64:bytes.toString('base64')}};}), charts: (result.files || []).map(file => {
     return { name: path.basename(file), dataUrl: `data:image/png;base64,${chartBytes(file, rootPath).toString('base64')}` };
   }) }));
   return { planId: plan.id, revision: plan.revision, steps: plan.steps, results };
@@ -727,9 +781,18 @@ handleApp('empirical-result-preview', (_event, projectId, conversationId, revisi
 handleApp('empirical-artifact-export', async (_event, projectId, conversationId, selection, reveal = false) => {
   const project = workspaceStore.loadWorkspace().projects.find(item => item.id === projectId);
   if (!project) throw new Error('项目不存在');
-  const { resultVersion, artifactFile } = require('./empirical-artifacts');
+  const { resultVersion, artifactFile, artifactWordTable } = require('./empirical-artifacts');
   const plan = resultVersion(project, conversationId, selection?.revision);
-  const file = artifactFile(plan, selection, path.join(app.getPath('userData'), 'analysis-runs', projectId));
+  let file;
+  if (selection?.kind === 'plan') {
+    if (selection.planId !== plan.id || selection.revision !== plan.revision || typeof selection.text !== 'string' || selection.text.length > 100_000) throw new Error('方案文件版本无效');
+    file = { data: Buffer.from(selection.text, 'utf8'), extension: 'md', name: `实证方案-第${plan.revision}版.md` };
+  } else file = artifactFile(plan, selection, path.join(app.getPath('userData'), 'analysis-runs', projectId));
+  if (selection?.kind === 'table') {
+    const table = plan.results.find(item => item.stepId === selection.stepId)?.tables?.[selection.index];
+    if (!table) throw new Error('该表格已不可用');
+    file = await artifactWordTable(project, table, file.name);
+  }
   const picked = await dialog.showSaveDialog(workspaceWindow || mainWindow, { title: '另存结果文件', defaultPath: file.name, filters: [{ name: file.extension.toUpperCase() + ' 文件', extensions: [file.extension] }] });
   if (picked.canceled || !picked.filePath) return { canceled: true };
   if (path.extname(picked.filePath).toLowerCase() !== '.' + file.extension) throw new Error('请保留结果文件的原始扩展名');
@@ -739,13 +802,42 @@ handleApp('empirical-artifact-export', async (_event, projectId, conversationId,
 });
 handleApp('ocr-status', () => workspaceStore.getOcrStatus());
 handleApp('agent-quality-summary', (_event, projectId) => summarizeRuns(workspaceStore.listAgentRuns(projectId, 200)));
+handleApp('agent-turn-trace', (_event, projectId, conversationId, runId) => require('./agent/turn-trace').readTurnTrace(workspaceStore, projectId, conversationId, runId));
 
+function preparationFile(projectId, conversationId, id) {
+  const project = workspaceStore.loadWorkspace().projects.find(item => item.id === projectId);
+  const preparation = project?.dataPreparations?.[conversationId];
+  if (!preparation || preparation.id !== id) throw new Error('该清洗文件不属于当前对话或已更新');
+  const data = require('./empirical-artifacts').dataBytes(preparation.preparedData.path, path.join(app.getPath('userData'), 'analysis-runs', projectId), preparation.preparedData.sha256);
+  return { data, name: '清洗后的分析数据.csv' };
+}
+handleApp('preparation-preview', (_event, projectId, conversationId, id) => { const file = preparationFile(projectId, conversationId, id); return { name: file.name, text: file.data.toString('utf8'),preview:{name:file.name,type:'spreadsheet',format:'.csv',dataBase64:file.data.toString('base64')} }; });
+handleApp('preparation-export', async (_event, projectId, conversationId, id, reveal = false) => {
+  const file = preparationFile(projectId, conversationId, id);
+  const picked = await dialog.showSaveDialog(workspaceWindow || mainWindow, { title: '另存清洗副本', defaultPath: file.name, filters: [{ name: 'CSV 文件', extensions: ['csv'] }] });
+  if (picked.canceled || !picked.filePath) return { canceled: true };
+  if (path.extname(picked.filePath).toLowerCase() !== '.csv') throw new Error('请保留 CSV 扩展名');
+  fs.writeFileSync(picked.filePath, file.data);
+  if (reveal) shell.showItemInFolder(picked.filePath);
+  return { canceled: false, filePath: picked.filePath };
+});
+handleApp('agent-interaction-respond', (event, payload) => {
+  if (payload?.documentPatch) {
+    const project = workspaceStore.loadWorkspace().projects.find(item => item.id === payload.projectId);
+    if (!project) throw new Error('项目不存在');
+    const dryStore = { loadWorkspace: () => ({ projects: [project] }), updateProject: () => {} };
+    require('./agent/plan-document').updatePlanDocument({ store: dryStore, projectId: payload.projectId, conversationId: payload.conversationId, reference: payload.reference, patch: payload.documentPatch, resolveAttachment: resolveConversationAttachment });
+  }
+  return interactionBroker.respond(payload, event.sender.id);
+});
 handleApp('draft-generate', async (event, projectId, request) => {
   const controller = new AbortController();
+  controller.projectId = projectId;
   activeGenerationControllers.set(request.requestId, controller);
   sendPetReaction('review', '主人，我正在检索文献并认真思考…');
   try {
-    return await getAgentOrchestrator(event).run({ projectId, request, signal: controller.signal });
+    controller.completion = getAgentOrchestrator(event).run({ projectId, request, signal: controller.signal });
+    return await controller.completion;
   } catch (error) {
     if (controller.signal.aborted || error.name === 'AbortError') {
       sendPetReaction('waving', '已停止当前回复，等你新的引导。');
@@ -762,10 +854,12 @@ handleApp('draft-generate', async (event, projectId, request) => {
 handleApp('draft-resume', async (event, projectId, runId, request) => {
   if (activeGenerationControllers.has(runId)) throw new Error('任务仍在运行，请先停止再恢复。');
   const controller = new AbortController();
+  controller.projectId = projectId;
   activeGenerationControllers.set(request.requestId, controller);
   sendPetReaction('review', '主人，我从上次断点的进度接着写啦…');
   try {
-    return await getAgentOrchestrator(event).resume({ projectId, runId, request, signal: controller.signal });
+    controller.completion = getAgentOrchestrator(event).resume({ projectId, runId, request, signal: controller.signal });
+    return await controller.completion;
   } catch (error) {
     if (controller.signal.aborted || error.name === 'AbortError') {
       sendPetReaction('waving', '已停止当前回复，等你新的引导。');

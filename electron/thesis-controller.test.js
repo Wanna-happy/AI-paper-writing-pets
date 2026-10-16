@@ -41,5 +41,7 @@ const assembled = buildAssembledThesis({ ...completeProject, drafts: [firstDraft
 assert(assembled.content.includes('新版本正文'));
 assert(!assembled.content.includes('旧版本正文'));
 assert.deepStrictEqual(assembled.citations, ['B']);
+const selected=buildAssembledThesis({...completeProject,drafts:[firstDraft,revisedDraft],assemblySelections:{[unit.id]:firstDraft.id}});
+assert(selected.content.includes('旧版本正文'));assert(!selected.content.includes('新版本正文'));assert.deepStrictEqual(selected.citations,['A']);
 
 console.log('thesis controller test passed');

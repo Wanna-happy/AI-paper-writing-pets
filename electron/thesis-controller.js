@@ -261,6 +261,10 @@ function buildAssembledThesis(project) {
     const existing = latestByUnit.get(draft.thesisUnit.id);
     if (!existing || new Date(draft.updatedAt || 0) > new Date(existing.updatedAt || 0)) latestByUnit.set(draft.thesisUnit.id, draft);
   }
+  for(const [unitId,draftId] of Object.entries(project.assemblySelections||{})){
+    const chosen=(project.drafts||[]).find(draft=>draft.id===draftId&&draft.mode==='api'&&draft.thesisUnit?.id===unitId&&text(draft.content));
+    if(chosen)latestByUnit.set(unitId,chosen);
+  }
   const units = [...latestByUnit.values()];
   const sections = control.chapters.map((chapter) => units
     .filter((draft) => draft.thesisUnit.chapterId === chapter.id)

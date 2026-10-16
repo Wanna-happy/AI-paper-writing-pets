@@ -82,7 +82,7 @@ function testSqlite(folder) {
   assert.strictEqual(JSON.parse(toolRun.data).result.kind, 'diagram');
 
   repository.saveWorkspace({ activeProjectId: null, projects: [] });
-  assert.deepStrictEqual(repository.loadWorkspace(), { activeProjectId: null, projects: [] });
+  assert.deepStrictEqual(repository.loadWorkspace(), { activeProjectId: null, projects: [], revision: state.revision + 1 });
   repository.close();
 }
 
