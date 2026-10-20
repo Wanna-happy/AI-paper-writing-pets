@@ -1,4 +1,4 @@
-param([ValidateSet('preview', 'signed')][string]$Mode = 'preview', [switch]$SkipTests, [string]$ValidateOnly = '', [string]$CertificateThumbprint = '')
+﻿param([ValidateSet('preview', 'signed')][string]$Mode = 'preview', [switch]$SkipTests, [string]$ValidateOnly = '', [string]$CertificateThumbprint = '')
 $ErrorActionPreference = 'Stop'
 $releaseRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 Set-Location -LiteralPath $releaseRoot
