@@ -32,4 +32,21 @@ faux.setResponses([
 ]);
 const output = await runPlan({ layer, registry, skillRuntime: runtime, plan: { tasks: [{ id: 'c', role: 'chat', task: '解释主题分析编码', skills: [], dependsOn: [] }] }, context: { project } });
 assert(sawReference); assert(output.finalText.includes('编码指南'));
+faux.setResponses([
+  fauxAssistantMessage([fauxToolCall('get_research_capabilities', { methodId: 'sem-cfa' })], { stopReason: 'toolUse' }),
+  context => { const text=JSON.stringify(context); assert(text.includes('requires-extension')); return fauxAssistantMessage('SEM/CFA尚未接通执行，不用EFA替换。'); },
+]);
+const capabilityOutput=await runPlan({layer,registry,skillRuntime:runtime,plan:{branch:'research',tasks:[{id:'capability',role:'chat',task:'查询SEM CFA能力',skills:[],dependsOn:[]}]},context:{project}});
+assert(capabilityOutput.finalText.includes('不替换')||capabilityOutput.finalText.includes('不用EFA替换'));
+const card=await read.execute('product-card',{id:'paper-pet::abstract'});
+assert(JSON.parse(card.content[0].text).text.includes('不执行开题流程'));
+faux.setResponses([context=>{
+  assert(JSON.stringify(context).includes('metadata-only'));
+  assert(JSON.stringify(context).includes('10.1234/example'));
+  return fauxAssistantMessage('<p>书目信息已有记录，全文论断尚待核验。</p>');
+}]);
+const handed=await runPlan({layer,registry,skillRuntime:runtime,
+  plan:{tasks:[{id:'source',role:'collector',task:'查文献',skills:[],dependsOn:[]},{id:'write',role:'writer',task:'撰写文献综述',skills:[],dependsOn:['source']}]},
+  resumeOutputs:{source:{role:'collector',status:'completed',text:'书目记录已取得',sourceRecords:[{doi:'10.1234/example',verificationScope:'metadata-only',fullTextVerified:false}]}},context:{project}});
+assert(handed.finalText.includes('尚待核验'));
 console.log('imported skills searched/read through real pi tool loop; legacy plan IDs normalized; blocked reads rejected');

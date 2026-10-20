@@ -18,11 +18,12 @@ class InteractionBroker {
     });
   }
   respond(payload, owner) {
-    if (payload?.action && !['approve', 'revise'].includes(payload.action)) throw new Error('交互动作无效');
+    if (payload?.action && !['approve', 'revise','deny'].includes(payload.action)) throw new Error('交互动作无效');
     if (payload?.action === 'revise' && !String(payload.feedback || '').trim()) throw new Error('请填写修改要求');
     const pending = this.pending.get(payload?.runId);
     if (!pending || pending.owner !== owner || pending.projectId !== payload.projectId || pending.conversationId !== payload.conversationId
       || pending.kind !== payload.kind || JSON.stringify(pending.reference) !== JSON.stringify(payload.reference)) throw new Error('任务或确认版本已更新，请使用当前确认卡');
+    if(payload.action==='deny'&&pending.kind!=='permission')throw new Error('交互动作无效');
     pending.finish(null, payload);
     return { accepted: true };
   }

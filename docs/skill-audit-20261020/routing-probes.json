@@ -1,0 +1,447 @@
+[
+  {
+    "domain": "社会学",
+    "task": "写研究背景",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "02-luwill-research-skills::research-proposal",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "24-Imbad0202-academic-research-skills::deep-research",
+      "42-wanshuiyin-ARIS::research-refine",
+      "66-zheng-siyao-empirical-research-skills::grillme"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "撰写绪论",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "50-brycewang-aer-skills::aer-introduction"
+    ],
+    "top8": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "50-brycewang-aer-skills::aer-introduction",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "02-luwill-research-skills::research-proposal",
+      "35-bahayonghang-academic-writing-skills::latex-thesis-zh",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "50-brycewang-aer-skills::aer-preregistration"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "根据已有正文写摘要和关键词",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::Econfin-Proposal"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "67-econfin-workflow-toolkit::journal-digest",
+      "67-econfin-workflow-toolkit::marp-slides-creator"
+    ]
+  },
+  {
+    "domain": "管理学",
+    "task": "写讨论与研究局限",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "02-luwill-research-skills::research-proposal",
+      "24-Imbad0202-academic-research-skills::deep-research",
+      "42-wanshuiyin-ARIS::research-refine",
+      "66-zheng-siyao-empirical-research-skills::grillme",
+      "67-econfin-workflow-toolkit::China-CF-Study"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "写论文结论",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "42-wanshuiyin-ARIS::paper-write",
+      "42-wanshuiyin-ARIS::paper-writing",
+      "67-econfin-workflow-toolkit::paper-writer",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "65-game-theory-paper-writer::game-theory-paper-writer"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "撰写文献综述",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "36-taoyunudt-literature-review-skill::literature-review"
+    ],
+    "top8": [
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "68-research-productivity-skills::literature-survey-generator",
+      "67-econfin-workflow-toolkit::journal-digest",
+      "02-luwill-research-skills::medical-imaging-review"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "制定选题和开题报告",
+    "role": "coordinator",
+    "fallback": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "67-econfin-workflow-toolkit::Econfin-Proposal"
+    ],
+    "top8": [
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::econfin-idea-finder",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "42-wanshuiyin-ARIS::idea-discovery-robot",
+      "65-game-theory-paper-writer::game-theory-paper-writer"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "建立理论框架",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "04-K-Dense-AI-claude-scientific-writer::hypothesis-generation"
+    ],
+    "top8": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::hypothesis-generation",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::chinese-ppt2",
+      "68-research-productivity-skills::five-questions",
+      "00-Full-empirical-analysis-skill_StatsPAI::StatsPAI_skill",
+      "48-de-AIGC-skills::de-aigc-skills"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "研究设计与研究方法",
+    "role": "coordinator",
+    "fallback": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "50-brycewang-aer-skills::aer-identification"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "50-brycewang-aer-skills::aer-identification",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "24-Imbad0202-academic-research-skills::deep-research",
+      "42-wanshuiyin-ARIS::research-refine",
+      "67-econfin-workflow-toolkit::econfin-idea-finder"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "分析教师访谈并开展主题分析",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "24-Imbad0202-academic-research-skills::deep-research",
+      "65-game-theory-paper-writer::game-theory-paper-writer",
+      "66-zheng-siyao-empirical-research-skills::did-reviewer",
+      "66-zheng-siyao-empirical-research-skills::R-optimizer"
+    ]
+  },
+  {
+    "domain": "管理学",
+    "task": "开展案例研究与扎根理论编码",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "02-luwill-research-skills::research-proposal",
+      "24-Imbad0202-academic-research-skills::deep-research",
+      "42-wanshuiyin-ARIS::research-refine",
+      "66-zheng-siyao-empirical-research-skills::codebook-pass",
+      "66-zheng-siyao-empirical-research-skills::grillme"
+    ]
+  },
+  {
+    "domain": "医学",
+    "task": "写系统综述 PRISMA",
+    "role": "collector",
+    "fallback": [
+      "52-keemanxp-slr-prisma::slr-prisma"
+    ],
+    "top8": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "52-keemanxp-slr-prisma::slr-prisma",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "43-wentorai-research-plugins::systematic-review-guide",
+      "02-luwill-research-skills::medical-imaging-review",
+      "03-K-Dense-AI-claude-scientific-skills::scientific-writing"
+    ]
+  },
+  {
+    "domain": "心理学",
+    "task": "进行Meta分析，合并效应量与异质性检验",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "50-brycewang-aer-skills::aer-robustness"
+    ],
+    "top8": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "50-brycewang-aer-skills::aer-robustness",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "67-econfin-workflow-toolkit::ml-causal"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "设计问卷与测量量表",
+    "role": "coordinator",
+    "fallback": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "66-zheng-siyao-empirical-research-skills::codebook-pass",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "50-brycewang-aer-skills::aer-preregistration",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "00-Full-empirical-analysis-skill_StatsPAI::StatsPAI_skill"
+    ]
+  },
+  {
+    "domain": "心理学",
+    "task": "开展信效度检验与SEM CFA",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "61-phdemotions-research-methods::analyze",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "67-econfin-workflow-toolkit::rdd-analysis",
+      "00.2-Full-empirical-analysis-skill_Stata::Full-empirical-analysis-skill-Stata"
+    ]
+  },
+  {
+    "domain": "经济学",
+    "task": "开展面板固定效应和双重差分DID",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "67-econfin-workflow-toolkit::did-analysis",
+      "67-econfin-workflow-toolkit::panel-data"
+    ],
+    "top8": [
+      "67-econfin-workflow-toolkit::panel-data",
+      "67-econfin-workflow-toolkit::did-analysis",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "66-zheng-siyao-empirical-research-skills::did-reviewer",
+      "66-zheng-siyao-empirical-research-skills::latex-table",
+      "67-econfin-workflow-toolkit::ml-causal"
+    ]
+  },
+  {
+    "domain": "经济学",
+    "task": "开展现代错位DID与事件研究",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "67-econfin-workflow-toolkit::did-analysis"
+    ],
+    "top8": [
+      "67-econfin-workflow-toolkit::did-analysis",
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::figure",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "00-Full-empirical-analysis-skill_StatsPAI::StatsPAI_skill",
+      "00.3-Full-empirical-analysis-skill_R::Full-empirical-analysis-skill-R"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "执行DTW聚类、LightGBM预测、TreeSHAP解释与LOWESS",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "66-zheng-siyao-empirical-research-skills::latex-table",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "67-econfin-workflow-toolkit::time-series",
+      "48-de-AIGC-skills::de-aigc-skills"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "数据清洗缺失值处理与变量构造",
+    "role": "preparer",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "66-zheng-siyao-empirical-research-skills::codebook-pass",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "66-zheng-siyao-empirical-research-skills::R-optimizer",
+      "67-econfin-workflow-toolkit::iv-estimation"
+    ]
+  },
+  {
+    "domain": "工学",
+    "task": "预测建模与交叉验证，避免数据泄漏",
+    "role": "analyst",
+    "fallback": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "65-game-theory-paper-writer::game-theory-paper-writer",
+      "66-zheng-siyao-empirical-research-skills::codebook-pass",
+      "66-zheng-siyao-empirical-research-skills::R-optimizer",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Econfin-Proposal"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "核验参考文献DOI与文中引用",
+    "role": "collector",
+    "fallback": [],
+    "top8": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::reference-verify",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "66-zheng-siyao-empirical-research-skills::citation-fidelity",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "68-research-productivity-skills::literature-survey-generator"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "将中文摘要翻译成英文",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::Econfin-Proposal"
+    ],
+    "top8": [
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "67-econfin-workflow-toolkit::chinese-quote-converter",
+      "67-econfin-workflow-toolkit::fix-chinese",
+      "67-econfin-workflow-toolkit::journal-digest",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "润色和压缩正文并保持原意",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::readability"
+    ],
+    "top8": [
+      "67-econfin-workflow-toolkit::readability",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "69-Paper-WorkFlow::paper-workflow",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "42-wanshuiyin-ARIS::auto-paper-improvement-loop",
+      "65-game-theory-paper-writer::game-theory-paper-writer",
+      "70-ssci-polish::ssci-polish",
+      "48-de-AIGC-skills::de-aigc-skills"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "结果解释与实证正文写作",
+    "role": "writer",
+    "fallback": [
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::paper-writer"
+    ],
+    "top8": [
+      "69-Paper-WorkFlow::paper-workflow",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::paper-writer",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "36-taoyunudt-literature-review-skill::literature-review"
+    ]
+  }
+]

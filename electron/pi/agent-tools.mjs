@@ -9,14 +9,15 @@ const requireMethodIds = () => [...empiricalMethods.methodCatalog().filter(item 
 import { wrapTool } from './agent-factory.mjs';
 import { Type } from '@earendil-works/pi-ai';
 import dependencyInstaller from '../sandbox/dependency-installer.js';
+import scholarlyMetadata from '../tools/scholarly-metadata.js';
 
-export function makeResearchSkillTools(runtime, project = {}) {
+export function makeResearchSkillTools(runtime, project = {}, role = '') {
   if (!runtime?.readDocument) return [];
   return [wrapTool({
     name: 'search_research_skills', label: '查找研究技能',
     description: '按当前任务与项目学科检索导入技能库，返回有限候选。只读，不执行技能内脚本。',
     parameters: Type.Object({ query: Type.String() }),
-    execute: async params => JSON.stringify(runtime.getCatalog({ project, task: params.query, limit: 12 })),
+    execute: async params => JSON.stringify(runtime.getCatalog({ project, task: params.query, role, limit: 12 })),
   }), wrapTool({
     name: 'read_research_skill', label: '读取技能与引用',
     description: '读取技能正文或相对技能目录的引用文件。长文件用nextOffset分页，不能访问库外路径或执行脚本。',
@@ -25,6 +26,21 @@ export function makeResearchSkillTools(runtime, project = {}) {
       try { return JSON.stringify(runtime.readDocument(params.id, params.path || '', params.offset || 0)); }
       catch (error) { return JSON.stringify({ error: error.message }); }
     },
+  }), wrapTool({name:'get_research_capabilities',label:'检查研究方法能力',
+    description:'只读查询真实登记方法、执行入口状态、依赖待检查和方法验收项。connected不是统计正确性认证；未登记的方法不能承诺已接通。',
+    parameters:Type.Object({methodId:Type.Optional(Type.String())}),execute:async params=>{
+      const methods=empiricalMethods.methodCatalog();
+      if(!params.methodId)return JSON.stringify({methods,unregisteredExamples:['meta-analysis'],materialWorkflows:{qualitative:'guided-with-source-review',questionnaireDesign:'guided-not-validated-scale',systematicReview:'guided-with-screening-log'},notice:'这是定量执行方法索引；材料研究可用适配卡与资料工具。依赖和数据适用性需实际执行检查；not-certified不表示方法错误。'});
+      try {const {method,constraint}=empiricalMethods.resolveMethod(params.methodId);return JSON.stringify({...method,constraint});}
+      catch(error){return JSON.stringify({methodId:params.methodId,executionStatus:error.code==='METHOD_NOT_CONNECTED'?'requires-extension':'unregistered',error:error.message});}
+    }})];
+}
+
+export function makeScholarlyTools({loadSettings,recordToolResult}={}) {
+  return [wrapTool({name:'lookup_scholarly_metadata',label:'核验学术文献元数据',
+    description:'通过Crossref实际核验DOI或按题名查找候选，返回作者年份等；不核验全文论断。只传公开题名或DOI，不发送私有正文。遵守网页访问权限。',
+    parameters:Type.Object({doi:Type.Optional(Type.String()),query:Type.Optional(Type.String())}),
+    execute:async(params,{signal}={})=>{const result=await scholarlyMetadata.lookupScholarlyMetadata({...params,loadSettings,signal});recordToolResult?.('collector','lookup_scholarly_metadata',result);return JSON.stringify(result);}
   })];
 }
 
@@ -124,8 +140,9 @@ export function makeCollectionTools({ searchWeb, collectData, recordToolResult }
   return tools;
 }
 
-export function makePlanningTools({ inspectData, prepareData, submitAnalysisPlan, submitWritingPlan, submitClarification } = {}) {
+export function makePlanningTools({ inspectData, prepareData, submitAnalysisPlan, submitWritingPlan, submitClarification, submitThesisOutline } = {}) {
   const tools = [];
+  if(submitThesisOutline)tools.push(wrapTool({name:'submit_thesis_outline',label:'讨论并确认论文目录',description:'根据用户在当前对话中逐步明确的研究问题和方法提出目录，展示确认卡。仅用户确认后保存；修改反馈须继续讨论。新建项目不要求目录，不能把建议当已确认。',parameters:Type.Object({chapters:Type.Array(Type.Object({id:Type.Optional(Type.String()),title:Type.String(),sectionIds:Type.Array(Type.String()),targetWords:Type.Optional(Type.Number())}),{minItems:1,maxItems:12})}),execute:async input=>JSON.stringify(await submitThesisOutline(input))}));
   if (submitClarification) tools.push(wrapTool({ name: 'submit_clarification', label: '集中澄清需求', description: '需要确认会改变方案的必要问题时调用。提交尚未回答的问题，界面逐题展示直接点选的选项；不要重复已确认事项。调用后只简短说明请填写卡片，不在正文重抄问题。',
     parameters: Type.Object({ title: Type.String(), questions: Type.Array(Type.Object({ id: Type.String(), decisionKey: Type.Optional(Type.String()), question: Type.String(), options: Type.Optional(Type.Array(Type.String())), suggestedAnswer: Type.Optional(Type.String()), required: Type.Optional(Type.Boolean()) })) }),
     execute: async params => JSON.stringify(await submitClarification(params)) }));

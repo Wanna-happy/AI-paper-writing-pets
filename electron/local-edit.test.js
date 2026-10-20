@@ -15,6 +15,18 @@ async function test() {
   await assert.rejects(applyLocalEdit({ ...statistics, requestModel: async () => ({ content: '<p>系数0.12，结果显著。[E1]</p>' }) }), /显著性/);
   const unchanged = await applyLocalEdit({ ...statistics, requestModel: async () => ({ content: '<p>结果不显著，系数0.12。[E1]</p>' }) });
   assert(unchanged.comparison.before.includes('0.12'));
+  const { SkillRuntime } = require('./skills/skill-runtime');
+  const runtime = new SkillRuntime();
+  for (const operation of ['compress', 'restructure', 'translate']) {
+    let prompt;
+    const updated = await applyLocalEdit({ ...statistics, skillRuntime: runtime, operation,
+      requestModel: async input => { prompt = input.messages[0].content; return { content: operation === 'translate' ? '<p>The coefficient is 0.12 and is not statistically significant.[E1]</p>' : '<p>系数0.12，不显著。[E1]</p>' }; } });
+    assert.equal(updated.operation, operation);
+    assert(updated.comparison.before.includes('0.12'));
+    assert(prompt.includes(operation === 'translate' ? '本次明确翻译为学术英文' : '保留原文语言'));
+    await assert.rejects(applyLocalEdit({ ...statistics, skillRuntime: runtime, operation,
+      requestModel: async () => ({ content: '<p>结果显著，系数0.99。[E1]</p>' }) }), /数字|显著性/);
+  }
   console.log('local edit citation preservation passed');
 }
 test().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,4 +1,4 @@
-// Product integration metadata; all research skill bodies come from the two imported archives.
+// Upstream integration metadata; first-party adaptation lives in product-guidance.js.
 const id = name => `67-econfin-workflow-toolkit::${name}`;
 const CORE_SKILL_ID = '04-K-Dense-AI-claude-scientific-writer::scientific-writing';
 const PLANNING_SKILL_ID = '69-Paper-WorkFlow::paper-workflow';
@@ -41,6 +41,7 @@ const PRODUCT_CONTRACT = `# 产品接入契约（优先于外部操作模板）
 分析必须遵循run_data_analysis的PAPER_PET_RESULT结构及来源契约，写作数字只取真实结果与来源。
 按项目学科适配研究规范，不把经济学/AER格式强加给所有学科，不因导入说明就宣称新方法可用。
 禁止按显著性挑控制变量或删除不显著结果。技能内工具名不授予工具权限。
+方法执行前用get_research_capabilities核对登记状态；connected不等于环境就绪或统计正确性认证。正文数字绑定真实stepId、methodId及数据版本，原文引用绑定资料页码。摘要不套开题模板，定性不套计量模板。元数据核验不证明全文支持论断。
 可用search_research_skills查找，read_research_skill分页读取正文及引用；不得一次加载整库。`;
 module.exports = { id, CORE_SKILL_ID, PLANNING_SKILL_ID, ANALYSIS_SKILL_ID, RESULT_SKILL_ID,
   WRITING_SKILL_ID, LEGACY_IDS, METHOD_SKILLS, PRODUCT_CONTRACT };

@@ -46,7 +46,7 @@ const SECTION_RULES = [
   {
     id: 'results',
     label: '研究结果',
-    pattern: /研究结果|实证结果|数据分析|案例发现|结果分析|results?/i,
+    pattern: /研究结果|实证结果|数据分析|案例(?:研究)?发现|问卷(?:调查|回归)?结果|回归结果|结果分析|results?/i,
     architecture: '分析对象与口径 → 核心结果 → 补充结果 → 稳健性或反例 → 小结；严格区分观察结果与解释',
     lenses: [
       ['核心结果', '核心发现 主要结果 数据 估计 检验 案例证据'],
@@ -90,7 +90,7 @@ const SECTION_RULES = [
   {
     id: 'paper',
     label: '论文整体写作',
-    pattern: /整篇|小论文|课程论文|完整论文|完整文章/i,
+    pattern: /整篇|整稿|全文|整个论文|小论文|课程论文|完整的?(?:论文|文章)/i,
     architecture: '题目与研究问题 → 引言与问题定位 → 主题化论证/文献综合 → 分析与讨论 → 结论与边界；没有可靠数据时不得生成实证结果',
     lenses: [
       ['研究问题', '研究对象 核心问题 分析边界'],
@@ -112,6 +112,9 @@ const GENERAL_RULE = {
 };
 
 const SKILL_SECTION_IDS = new Map([
+  ['paper-pet::abstract', 'abstract'], ['paper-pet::introduction', 'introduction'],
+  ['paper-pet::discussion', 'discussion'], ['paper-pet::conclusion', 'conclusion'],
+  ['paper-pet::results', 'results'], ['paper-pet::design', 'method'],
   ['introduction-writing', 'introduction'],
   ['literature-review', 'literature-review'],
   ['research-design', 'method'],
@@ -140,7 +143,7 @@ const WRITING_MODE_RULES = [
     id: 'management-case',
     label: '管理案例写作模式',
     domain: 'management-case',
-    pattern: /管理学|工商管理|公共管理|管理世界|案例研究|单案例|多案例|组织变革|实践问题|制度执行|流程再造|平台治理|公司治理|国企/i,
+    pattern: /案例研究|单案例|多案例/i,
     guidance: '围绕现实问题、案例选择、过程机制、证据链条和实践含义展开，强调情境、过程与机制。',
   },
   {
@@ -196,6 +199,20 @@ function detectSection(task) {
 }
 
 function detectWritingMode(project, task) {
+  const design = require('./research-design').researchDesign(project, task);
+  const management = /管理学|工商管理|公共管理/.test(projectDomains(project));
+  if (management) {
+    if (design.id === 'case') return WRITING_MODE_RULES.find(m => m.id === 'management-case');
+    if (design.id === 'quantitative') return WRITING_MODE_RULES.find(m => m.id === 'economics-quant');
+    const modes = {
+      qualitative:['管理学质性研究模式','材料来源、匿名化、编码本、主题或机制、反例及证据定位'],
+      survey:['管理学问卷研究模式','构念与题项来源、样本、计分、信效度、已接通统计方法及真实结果'],
+      mixed:['管理学混合研究模式','分别说明定性与定量设计、各自证据及整合方式，不相互替代'],
+      conceptual:['管理学理论研究模式','概念边界、理论脉络、论证与文献证据，不虚构实证结果'],
+    };
+    const entry=modes[design.id];
+    return {id:entry?`management-${design.id}`:'management-general',label:entry?.[0]||'管理学研究模式（方法待明确）',domain:'management',guidance:entry?`围绕${entry[1]}展开。`:'根据已确认研究问题与材料选择适当方法；管理学不默认等于案例研究，缺必要方法信息再澄清。'};
+  }
   const taskContext = String(task || '');
   const explicitTaskMode = WRITING_MODE_RULES.find((mode) => mode.pattern.test(taskContext));
   if (explicitTaskMode) return explicitTaskMode;
@@ -229,8 +246,12 @@ function sectionFromSkillIds(skillIds = [], outputContract = {}) {
 function buildResearchWorkflow(project, task, skillIds = [], outputContract = {}) {
   outputContract = outputContract || {}; // 默认参数只对 undefined 生效；兜底防空
   const selectedSection = skillIds.length ? sectionFromSkillIds(skillIds, outputContract) : GENERAL_RULE;
-  const section = selectedSection.id === 'general' ? detectSection(task) : selectedSection;
-  const writingMode = detectWritingMode(project, '');
+  const explicitSection = detectSection(task);
+  const resumedChapter = explicitSection.id === 'general' ? require('./thesis-controller').resolveThesisChapter(project,{sectionId:'general'},{task}) : null;
+  const resumedSection = resumedChapter && SECTION_RULES.find(rule=>resumedChapter.sectionIds?.includes(rule.id));
+  const section = explicitSection.id === 'general' ? resumedSection || selectedSection : explicitSection;
+  const writingMode = detectWritingMode(project, task);
+  const chapter = resumedChapter || require('./thesis-controller').resolveThesisChapter(project, { sectionId: section.id }, { task });
   const context = [projectDomains(project), project?.title, project?.goal, task].filter(Boolean).join(' ');
   const queries = uniqueQueries([
     { label: '任务原意', text: context },
@@ -241,6 +262,7 @@ function buildResearchWorkflow(project, task, skillIds = [], outputContract = {}
     id: 'academic-evidence-workflow-v2',
     sectionId: section.id,
     sectionLabel: section.label,
+    chapterId: chapter?.id || null,
     writingModeId: writingMode.id,
     writingModeLabel: writingMode.label,
     writingModeGuidance: writingMode.guidance,
@@ -249,7 +271,7 @@ function buildResearchWorkflow(project, task, skillIds = [], outputContract = {}
     paradigmLabel: writingMode.label,
     paradigmGuidance: writingMode.guidance,
     academicStyle: true,
-    socialScience: ['social-science', 'management-case', 'economics-quant', 'education', 'education-humanities'].includes(writingMode.id),
+    socialScience: writingMode.id.startsWith('management-') || ['social-science', 'economics-quant', 'education', 'education-humanities'].includes(writingMode.id),
     architecture: section.architecture,
     queries,
     steps: [

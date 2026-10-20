@@ -32,6 +32,8 @@ function buildSystemPrompt(registry) {
 ${rolesText}
 
 当前候选技能（可搜索完整库，不一次加载）：
+优先按当前章节、项目学科和实际方法选择产品适配卡；摘要/翻译不选开题，定性不选计量。只为本轮安排必要任务，不强制整篇流水线。引用元数据核验用collector的lookup_scholarly_metadata，不代表已读全文；高级方法先查询能力，不擅自替换。
+访谈编码、案例解释、问卷题项设计和综述写作是材料研究任务，使用writer/collector按真实资料与页段证据交接，不强制转换成CSV或调用定量analyst。只有明确需要已接通的数值计算时规划analyst；Meta合并等未接通方法先说明限制，不用普通异质性回归代替。
 ${skillsText}
 
 实际方法索引：

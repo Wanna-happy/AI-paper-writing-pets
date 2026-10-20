@@ -34,8 +34,9 @@ function expandPaths(paths) {
   return { files, rejected };
 }
 
-async function importProjectFiles({ store, ragStore, projectId, paths }) {
+async function importProjectFiles({ store, ragStore, projectId, paths, conversationId }) {
   if (!store.loadWorkspace().projects.some(project => project.id === projectId)) throw new Error('请先创建论文项目');
+  if(conversationId&&!store.loadWorkspace().projects.find(project=>project.id===projectId)?.conversations?.some(item=>item.id===conversationId))throw new Error('对话不属于当前项目');
   const { files, rejected } = expandPaths(paths);
   const added = [];
   for (const file of files) {
@@ -45,13 +46,13 @@ async function importProjectFiles({ store, ragStore, projectId, paths }) {
       const existing = (project.projectFiles || []).find(item => item.fingerprint === fingerprint);
       if (existing && resolveConversationAttachment(existing)) {
         // Reusing an older identical upload makes it the current version again.
-        const reused = { ...existing, importedAt: new Date().toISOString() };
+        const reused = { ...existing, importedAt: new Date().toISOString(), sourceConversationIds:[...new Set([...(existing.sourceConversationIds||[]),...(conversationId?[conversationId]:[])])] };
         store.updateProject(projectId, { projectFiles: [...(project.projectFiles || []).filter(item => item.id !== existing.id), reused] });
         added.push(reused);
         continue;
       }
       const [attachment] = await prepareConversationFiles([file.path]);
-      Object.assign(attachment, { projectId, scope: 'project', fingerprint, relativePath: file.relativePath,
+      Object.assign(attachment, { projectId, scope: 'project', fingerprint, sourceConversationIds:conversationId?[conversationId]:[], relativePath: file.relativePath,
         kind: LITERATURE.has(attachment.extension) ? 'literature' : 'data', importedAt: new Date().toISOString() });
       attachment.name = file.relativePath;
       if (['.csv', '.xlsx', '.xls'].includes(attachment.extension)) attachment.excerpt = '数据已保存在当前项目；请调用 inspect_data_file 核对字段、样本和数据口径。';

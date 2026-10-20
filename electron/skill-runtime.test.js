@@ -6,7 +6,8 @@ const { SkillRuntime, extractMarkdownSection, frontmatterValue } = require('./sk
 const { CORE_SKILL_ID, PLANNING_SKILL_ID, LEGACY_IDS } = require('./skills/research-adapter');
 const root = path.resolve(__dirname, '../assets/research-skills');
 const runtime = new SkillRuntime(root);
-assert.equal(runtime.skills.size, 1107);
+assert.equal([...runtime.skills.values()].filter(s => !s.product).length, 1107);
+assert.equal([...runtime.skills.values()].filter(s => s.product).length, 13);
 assert(!fs.existsSync(path.resolve(__dirname, '../assets/skills')), 'Removed skills must stay outside the product');
 assert(runtime.getCatalog().every(s => s.id.includes('::') && s.description));
 assert.equal(new Set(runtime.getCatalog().map(s => s.id)).size, runtime.getCatalog().length);

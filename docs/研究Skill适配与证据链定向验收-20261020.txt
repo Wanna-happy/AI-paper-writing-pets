@@ -1,0 +1,42 @@
+研究Skill适配与证据链：实施及定向验收
+日期：2026-10-20
+
+本次实施
+1. 新增13张产品研究指导卡，并接入实际Skill目录、角色检索、正文注入与分页阅读：摘要/翻译、绪论、讨论、结论/全篇检查、跨学科研究设计、文献证据、数据准备、预测/聚类/解释、结果交接、定性、问卷、系统综述/Meta边界、修改/交付。
+2. 保留1107条上游目录，现共1120条、1094条启用。没有修改上游Skill原文，也没有批量下载新库。受限来源和显著性筛选仍被禁止。
+3. 按任务、角色、学科提高适配；通用分析不再对所有请求强加40分。重复/跨域内容默认降出候选，显式匹配和产品入口保留。未知/混合来源标记待核对。
+4. 摘要不再默认开题，非明确AER请求不加载AER引言；非经管设计不加载经济金融识别模板。案例/扎根、问卷、引用核验和Meta已有专门中文匹配，并避免通用计量指导污染这些材料任务。
+5. 旧方案即使带入不适用Skill，composePrompt也会检查并补入当前章节产品卡。长手册按任务匹配相关标题段落；送入的片段记录源内容哈希、片段哈希和标题，原文仍可分页读取。
+6. 36类方法公开登记状态、待检查依赖和not-certified状态，29类接通方法均有检查卡。生成/修复Python代码时自动注入当前方法检查；DTW、分组验证、LightGBM、SHAP、LOWESS保留方法边界。
+7. 新增get_research_capabilities只读工具，所有研究角色可查询实际方法状态。定性/问卷题项/综述写作作为材料工作流，不强制走CSV定量执行；Meta统计合并单独标未接入。
+8. 新增Crossref DOI/题名书目核验工具，固定服务入口，复用公网DNS检查、大小限制、超时及网页权限/批准。书目匹配区分DOI精确、题名精确与候选；全部标记metadata-only及fullTextVerified:false，不把元数据当原文证据。不开启用户网页权限，不发送正文，不使用用户模型密钥。
+9. 书目台账随任务输出/检查点交给下游写作；恢复已完成采集任务时仍可读取。结果解析增加数据指纹一致性检查与校验范围标记，不把schema通过当作统计正确性认证。
+10. 局部修改菜单新增压缩、译为学术英文、改善论证衔接，复用全文修改预览和接受/取消；保留数字、方向、显著性、引用、脚注与原文保护。菜单增加小窗口滚动支持。
+
+通过的定向用例
+- node electron/skills/product-guidance.test.js：22个中文任务/学科/角色场景，旧模板纠偏，预算、片段哈希、读取边界、36类方法状态及29张方法检查。
+- node electron/skill-runtime.test.js：上游数量与原禁止项、检索、分页、路径边界和方法Skill关联。
+- node electron/pi/research-skills.test.mjs：真实Agent工具循环中的搜索/阅读，方法能力查询，产品卡读取，以及恢复后的书目台账传给writer（模拟模型，不评价生成质量）。
+- node electron/tools/scholarly-metadata.test.js：关闭网页时零请求、拒绝任意URL、固定Crossref端点、DOI错配拒绝、题名候选、metadata-only与无效响应；使用离线服务样本，未做公网在线验收。
+- node electron/permission-policy.test.js：权限拒绝、批准、撤权与配置持久化。
+- node electron/empirical-workflow.test.js：方案/版本/数据边界、结果结构、不同数据指纹拒绝和非认证状态。
+- node electron/local-edit.test.js：原有保护及新增压缩/英文翻译/论证重组，数值或显著性篡改拒绝。
+- node electron/code-analysis.test.js：真实小型CSV生成Python并在Windows沙箱计算，均值为2.0。
+- node electron/analysis-repair.test.js：实际沙箱Matplotlib错误修复及重跑。
+- node electron/pi/pipeline-flow.test.mjs：实际清洗→必要澄清→修改后确认→分析→已授权正文交付，原始数据不变。
+- 相关JS/MJS语法检查通过；相关改动git diff --check通过。未运行全量回归。
+
+环境记录
+受限终端最初无法创建Windows沙箱，出现create-app-container错误。通过升级权限重跑上述三个需要真实沙箱的定向用例后通过。没有绕过产品沙箱或回退普通Python执行。
+
+仍需如实保留的边界
+- 7类requires-extension（现代错位DID、动态面板GMM、SEM/CFA、Tobit/Heckman、空间计量、因果ML、复杂抽样加权）仍未新增执行实现。本次修复能力说明和错误替代，不冒称这些方法已实现。
+- Meta统计合并仍未登记执行；系统综述/问卷/定性指导不等于自动完成筛选、偏倚评价、量表验证或访谈复核。
+- 方法检查卡和定向链路通过不等于所有学科、所有方法统计正确性已认证；保留not-certified。
+- Crossref在线服务、真实模型的措辞与选择稳定性、复杂文稿的修改质量仍需要专项样本评估；OpenAlex未接入，不宣称已支持多个学术数据库。
+- 未重启用户正在使用的程序，运行中的实例需重启后加载本次代码。未提交或推送Git；此前未提交改动保留。
+
+对照资料
+docs/skill-audit-20261020/routing-probes-after.csv：24个请求修复前后对照。
+docs/skill-audit-20261020/skills-after.csv：修复后目录。
+原审计报告与原始清单保留为修改前基线，不能拿其启用数量当作本次修改后数量。

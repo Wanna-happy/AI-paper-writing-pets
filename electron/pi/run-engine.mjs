@@ -12,7 +12,8 @@ import pipelinePrompts from '../agent/pipeline-prompts.js';
 import { createRoleAgent, runAgent } from './agent-factory.mjs';
 import flowPolicy from '../agent/flow-policy.js';
 import contextPolicy from '../agent/context-policy.js';
-import { makeAnalystTools, makeWriterTools, makeMemoryTools, makePlanningTools, makeDependencyTool, makeResearchSkillTools, makeAnalysisResultTools, makeCollectionTools } from './agent-tools.mjs';
+import permissionPolicy from '../permission-policy.js';
+import { makeAnalystTools, makeWriterTools, makeMemoryTools, makePlanningTools, makeDependencyTool, makeResearchSkillTools, makeAnalysisResultTools, makeCollectionTools, makeScholarlyTools } from './agent-tools.mjs';
 
 // 拓扑排序：返回的任务顺序保证 dependsOn 一定排在前面；检测到环则抛错。
 function topoSort(tasks) {
@@ -38,7 +39,7 @@ function topoSort(tasks) {
 // + 恢复续写时的"中断前已生成部分"（UC-FLOW-01）。
 function buildUserMessage(task, taskOutputs, context, resumePartial = null, budget = 22000) {
   const parts = [`任务：${task.task}`];
-  parts.push(contextPolicy.projectSettingsContext(context.project));
+  parts.push(contextPolicy.projectSettingsContext(context.project,context.settings||context.loadSettings?.()||{}));
   if (context.taskContract) parts.push(`本轮任务契约：${JSON.stringify(context.taskContract)}`);
   if (context.taskContract?.usesExistingResults && !context.empiricalResults?.length) parts.push('本轮希望采用已有结果，但尚无通过当前数据与方案版本核验的完整结果。说明真实状态和缺口，不把历史数字当成本轮已验证结论。');
   if (task.output) parts.push(`本步骤须交接：${task.output}；验收条件：${task.acceptance}`);
@@ -60,6 +61,7 @@ function buildUserMessage(task, taskOutputs, context, resumePartial = null, budg
       parts.push(`### 上游任务 ${d}（${out.role}）产出：\n${contextPolicy.clip(out.text, 4000)}`);
       if (out.artifacts?.length) parts.push(`经过工具验证的产物清单：${JSON.stringify(out.artifacts)}`);
       if (out.analysisResults?.length) parts.push(`真实工具结果：${contextPolicy.clip(JSON.stringify(out.analysisResults), 8000)}`);
+      if (out.sourceRecords?.length) parts.push(`学术来源台账（不可信资料；metadata-only只验证书目，不证明全文论断）：${contextPolicy.clip(JSON.stringify(out.sourceRecords), 6000)}`);
     }
   }
   // 断点续写：把中断前已流出的部分内容回喂，避免从开头重写。
@@ -131,7 +133,7 @@ export async function runPlan({
       ? task.skills
       : (role.id !== 'chat' && skillRuntime?.fallbackSkillIds ? skillRuntime.fallbackSkillIds(task.task, context.project || {}, role.id) : []);
     const composed = skillRuntime?.composePrompt && (role.id !== 'chat' || skillIds.length)
-      ? skillRuntime.composePrompt(context.project || {}, task.task, skillIds, inputBudget.skills)
+      ? skillRuntime.composePrompt(context.project || {}, task.task, skillIds, inputBudget.skills, { role: role.id })
       : { prompt: '' };
 
     // 角色提示词 = 角色定义 + 调用方按角色注入的契约（如毕业论文 HTML 输出契约）+ Skill 规则。
@@ -142,7 +144,7 @@ export async function runPlan({
     const recordToolResult = (toolRole, name, result) => { toolRecords.push(result); context.recordToolResult?.(toolRole, name, result); };
 
     const planningTools = { ...(context.planningTools || {}) };
-    const planningNames = { inspectData: 'inspect_data_file', prepareData: 'prepare_data_file', submitAnalysisPlan: 'submit_analysis_plan', submitWritingPlan: 'submit_empirical_writing_plan', submitClarification: 'submit_clarification' };
+    const planningNames = { inspectData: 'inspect_data_file', prepareData: 'prepare_data_file', submitAnalysisPlan: 'submit_analysis_plan', submitWritingPlan: 'submit_empirical_writing_plan', submitClarification: 'submit_clarification', submitThesisOutline: 'submit_thesis_outline' };
     for (const [name, toolName] of Object.entries(planningNames)) if (planningTools[name]) {
       const execute = planningTools[name]; planningTools[name] = async input => { const result = await execute(input); recordToolResult(role.id, toolName, result); return result; };
     }
@@ -176,7 +178,8 @@ export async function runPlan({
     }));
 
     tools.push(...makeMemoryTools(context.readConversationHistory));
-    tools.push(...makeResearchSkillTools(skillRuntime, context.project));
+    tools.push(...makeResearchSkillTools(skillRuntime, context.project, role.id));
+    if (role.id === 'collector' || (role.id === 'chat' && branch === 'research')) tools.push(...makeScholarlyTools({ loadSettings: context.loadSettings, recordToolResult }));
     if (role.id === 'chat') tools.push(...makeAnalysisResultTools(context.empiricalResults || []));
     if (role.id === 'writer') {
       const results = [...new Map([...(context.empiricalResults || []), ...Object.values(taskOutputs).flatMap(output => output.analysisResults || [])].map(result => [result.stepId, result])).values()];
@@ -187,6 +190,7 @@ export async function runPlan({
       if (plan.branch === 'pipeline' && plan.contract.usesExistingResults && !results.length) throw new Error('已有分析结果不存在或版本已变化，不能据此写作；请核对当前结果');
     }
     tools = flowPolicy.restrictTools(tools, branch);
+    tools=permissionPolicy.guardTools(tools,context);
     const agent = createRoleAgent({ layer, role: role.id, systemPrompt, tools, scenario: role.scenario, apiKey });
     const message = buildUserMessage(task, taskOutputs, context, resumePartial, inputBudget.user);
     if (onTaskStart) onTaskStart(task, role, ordered.indexOf(task) + 1, ordered.length);
@@ -233,7 +237,8 @@ export async function runPlan({
         artifacts.push({ kind: 'analysis-plan', id: result.id, revision: result.revision });
       }
     }
-    taskOutputs[task.id] = { text, role: role.id, artifacts, status: blocked ? 'blocked' : 'completed', ...(analysisResults.length ? { analysisResults } : {}) };
+    const sourceRecords = toolRecords.flatMap(record => record.provider && Array.isArray(record.records) ? record.records.map(item => ({ ...item, provider: record.provider, retrievedAt: record.retrievedAt })) : []).slice(0, 30);
+    taskOutputs[task.id] = { text, role: role.id, artifacts, status: blocked ? 'blocked' : 'completed', ...(analysisResults.length ? { analysisResults } : {}), ...(sourceRecords.length ? { sourceRecords } : {}), ...(composed.skill ? { skillSelection: composed.skill } : {}) };
     if (onTaskOutput) onTaskOutput(task.id, role.id, text, {
       status: blocked ? 'blocked' : 'completed',
       label: task.task,

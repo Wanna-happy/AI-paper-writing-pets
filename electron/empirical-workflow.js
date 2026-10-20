@@ -7,7 +7,7 @@ const { MAX_TASKS } = require('./agent/flow-policy');
 
 const { CORE_SKILL_ID, WRITING_SKILL_ID, RESULT_SKILL_ID, LEGACY_IDS } = require('./skills/research-adapter');
 const CATALOG_PATH = path.join(__dirname, '../assets/research-runtime/methods.json');
-function methodCatalog() { return JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf8')).methods; }
+function methodCatalog() { return JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf8')).methods.map(require('./skills/method-guidance').capability); }
 function short(value, max = 2000) { return String(value || '').trim().slice(0, max); }
 function fingerprint(file) { return createHash('sha256').update(fs.readFileSync(file)).digest('hex'); }
 function currentPlan(project, conversationId) { return project?.empiricalPlans?.[conversationId] || null; }
@@ -116,7 +116,7 @@ function planningContext(plan) {
   const catalog = methodCatalog().map(method => `${method.id}：${method.name}；${method.status}；Skill=${method.skillId}`).join('\n');
   const context = plan && { ...plan, history: (plan.history || []).map(item => ({ revision: item.revision, status: item.status })),
     results: (plan.results || []).map(result => ({ stepId: result.stepId, methodId: result.methodId, status: result.status, sampleSize: result.sampleSize, summary: result.summary, tableTitles: (result.tables || []).map(table => table.title), chartNames: (result.files || []).map(file => path.basename(file)), limitations: result.limitations, reason: result.reason })) };
-  return `# 实证方法索引（available 表示有执行指导与依赖，不表示任意数据均适用）\n${catalog}\n\n# 当前对话的实证方案\n${context ? JSON.stringify(context) : '尚未制定。任何实际分析须先由对话 Agent 提交具体方案，再由用户点击确认。'}`;
+  return `# 实证方法索引（available仅表示执行入口已接通，不表示依赖已安装、数据适用或统计正确性已认证；requires-extension不可执行，不得替换用户方法）\n${catalog}\n\n# 当前对话的实证方案\n${context ? JSON.stringify(context) : '尚未制定。任何实际分析须先由对话 Agent 提交具体方案，再由用户点击确认。'}`;
 }
 
 function validateStep(plan, stepId, dataFile, resolveAttachment) {
@@ -134,6 +134,7 @@ function parseResult(stdout, { plan, step, sourceFingerprint }) {
   if (line.length > 2000000) throw new Error('分析结果过大，请汇总为论文所需的统计表');
   const result = JSON.parse(line.slice('PAPER_PET_RESULT='.length));
   if (result.schemaVersion !== 1 || result.stepId !== step.id || result.methodId !== step.methodId) throw new Error('分析结果的步骤或方法与已确认方案不一致');
+  if (!sourceFingerprint || sourceFingerprint !== plan.dataFingerprint) throw new Error('结果的数据指纹与已确认方案不一致，不能交给写作');
   if (!['completed', 'not-applicable'].includes(result.status) || !short(result.summary)) throw new Error('分析结果状态无效');
   if (!Number.isInteger(result.sampleSize) || result.sampleSize < 0) throw new Error('分析缺少真实样本量');
   if (!Array.isArray(result.tables) || result.tables.length > 20 || !Array.isArray(result.diagnostics)) throw new Error('结果必须包含表格列表及诊断列表');
@@ -153,6 +154,7 @@ function parseResult(stdout, { plan, step, sourceFingerprint }) {
     stepId: step.id, methodId: step.methodId, status: result.status, summary: short(result.summary, 10000),
     sampleSize: result.sampleSize, tables: result.tables, diagnostics: result.diagnostics.slice(0, 80),
     limitations: Array.isArray(result.limitations) ? result.limitations.map(value => short(value)).slice(0, 30) : [],
+    validation: { scope: 'schema-and-provenance', schema: 'passed', statisticalCorrectness: 'not-certified', diagnostics: result.diagnostics.length ? 'reported-not-certified' : 'not-reported' },
     reason: short(result.reason), dataFingerprint: sourceFingerprint, createdAt: new Date().toISOString() };
 }
 

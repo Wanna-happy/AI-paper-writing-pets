@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-20",
+  "total": 1107,
+  "enabled": 1081,
+  "disabled": 26,
+  "collections": 77,
+  "tiers": {
+    "core": 22,
+    "extended": 888,
+    "duplicate": 84,
+    "out-of-domain": 113
+  },
+  "enabledTiers": {
+    "core": 22,
+    "extended": 863,
+    "duplicate": 83,
+    "out-of-domain": 113
+  },
+  "commercialMetadata": {
+    "allowed": 743,
+    "share-alike": 34,
+    "unknown": 305,
+    "restricted": 25
+  },
+  "entriesWithUpstreamEvalMarkers": 21,
+  "methodStatuses": {
+    "available": 29,
+    "requires-extension": 7
+  },
+  "analysisSkillMappedMethodCount": 19
+}

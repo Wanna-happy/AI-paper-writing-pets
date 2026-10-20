@@ -1,0 +1,26 @@
+window.SettingsExperience=(()=>{
+  const panel=document.querySelector('[data-settings-content="personalization"]'),card=node('section','settings-card form-card formatting-settings'),heading=node('h2');heading.textContent='文稿排版';
+  const help=node('p');help.textContent='保存后用于下一次 Word 导出及组装导出。语言与引用格式统一使用本页设置，本轮明确要求优先；上传原文件保持只读。字体需在阅读设备上可用。';card.append(heading,help);
+  const defaults={bodyFont:'宋体',latinFont:'Times New Roman',headingFont:'黑体',bodySize:14,heading1Size:18,heading2Size:16,heading3Size:14,lineMode:'multiple',lineValue:1.75,firstLineChars:2,marginTop:2.75,marginBottom:2.75,marginLeft:3.1,marginRight:2.75,requirementsSource:''};
+  const labels={bodyFont:'正文字体',latinFont:'西文字体',headingFont:'标题字体',bodySize:'正文字号（pt）',heading1Size:'一级标题字号（pt）',heading2Size:'二级标题字号（pt）',heading3Size:'三级标题字号（pt）',lineMode:'行距方式',lineValue:'行距数值',firstLineChars:'首行缩进（字符）',marginTop:'上边距（cm）',marginBottom:'下边距（cm）',marginLeft:'左边距（cm）',marginRight:'右边距（cm）'};
+  const fields={},grid=node('div','formatting-grid'),advanced=node('details'),summary=node('summary');summary.textContent='标题和页边距';advanced.append(summary);const advancedGrid=node('div','formatting-grid');advanced.append(advancedGrid);
+  for(const [key,label] of Object.entries(labels)){
+    const wrap=node('label');wrap.textContent=label;const input=node(key==='lineMode'?'select':'input');input.id='format-'+key;input.setAttribute('aria-label',label);
+    if(key==='lineMode')for(const [value,text]of [['multiple','倍数行距'],['exact','固定值（磅）']]){const option=node('option');option.value=value;option.textContent=text;input.append(option);}
+    else if(key.endsWith('Font')){input.type='text';input.maxLength=60;input.setAttribute('list','format-font-options');}
+    else{input.type='number';input.required=true;input.step=key.includes('margin')?'0.05':'0.25';input.min=key.includes('margin')?'0.5':key==='firstLineChars'?'0':key==='lineValue'?'1':'8';input.max=key.includes('margin')?'6':key==='firstLineChars'?'4':key==='lineValue'?'60':'36';}
+    input.addEventListener('input',changed);input.addEventListener('change',()=>{if(key==='lineMode'){fields.lineValue.value=input.value==='exact'?'28':'1.75';}changed();});fields[key]=input;wrap.append(input);(key.startsWith('heading')||key.startsWith('margin')?advancedGrid:grid).append(wrap);
+  }
+  const fonts=node('datalist');fonts.id='format-font-options';for(const font of ['宋体','黑体','楷体','仿宋','微软雅黑','Times New Roman','Arial','Calibri']){const option=node('option');option.value=font;fonts.append(option);}
+  const hint=node('small');hint.textContent='常用字号：小四 12 pt、四号 14 pt、小三 15 pt、三号 16 pt。';
+  const preview=node('section','formatting-preview');preview.setAttribute('aria-label','排版样式示例');const previewHeading=node('strong'),previewBody=node('p');previewHeading.textContent='研究背景';previewBody.textContent='本研究围绕明确的问题展开。结合已有文献与真实资料，说明研究背景、分析思路及结论的适用范围。';preview.append(previewHeading,previewBody);
+  const imported=node('div','formatting-import'),importButton=node('button','secondary-button'),status=node('p');importButton.type='button';importButton.textContent='上传格式要求';status.setAttribute('role','status');status.textContent='支持 10 MB 以内的 DOCX、文字版 PDF、TXT、Markdown，本地解析后请核对。';
+  let source='';importButton.onclick=async()=>{importButton.disabled=true;try{const result=await window.petAPI.importFormattingRequirements();if(result.canceled)return;load({documentFormatting:{...collect(),...result.documentFormatting,requirementsSource:result.name}});if(result.defaultCitation)el['default-citation'].value=result.defaultCitation;status.textContent=`${result.name}：识别 ${result.recognizedFields.length} 项排版参数。${result.warnings.join(' ')} 请核对后保存。`;el['settings-save-status'].textContent='已解析，尚未保存';}catch(error){status.textContent=`解析失败：${error.message}`;}finally{importButton.disabled=false;}};
+  imported.append(importButton,status);card.append(imported,grid,hint,advanced,fonts,preview);panel.append(card);
+  function changed(){el['settings-save-status'].textContent='尚未保存';paint();}
+  function collect(){const result={requirementsSource:source};for(const [key,input] of Object.entries(fields))result[key]=key.endsWith('Font')||key==='lineMode'?input.value:Number(input.value);return result;}
+  function paint(){const f=collect();previewBody.style.fontFamily=f.bodyFont;previewBody.style.fontSize=f.bodySize+'pt';previewBody.style.lineHeight=f.lineMode==='exact'?f.lineValue+'pt':String(f.lineValue);previewBody.style.textIndent=f.firstLineChars+'em';previewHeading.style.fontFamily=f.headingFont;previewHeading.style.fontSize=f.heading1Size+'pt';fields.lineValue.min=f.lineMode==='exact'?'10':'1';fields.lineValue.max=f.lineMode==='exact'?'60':'3';}
+  function load(settings){const f={...defaults,...settings.documentFormatting};for(const [key,input]of Object.entries(fields))input.value=f[key];source=f.requirementsSource||'';status.textContent=source?`当前格式来源：${source}。保存参数用于下一次导出。`:'可直接填写，或上传格式要求后核对。上传原文不会发送给模型。';paint();}
+  for(const input of document.querySelectorAll('[data-settings-content="permissions"] input,[data-settings-content="permissions"] select'))input.addEventListener('change',()=>{el['settings-save-status'].textContent='权限尚未保存';});
+  return {load,collect};
+})();

@@ -8,10 +8,10 @@ function createThesisProfileFields() {
   const fields = document.createElement('fieldset');
   fields.id = 'thesis-profile-fields';
   fields.className = 'thesis-profile-fields';
-  fields.innerHTML = `<legend>长论文档案（5 万字硕士论文必填）</legend>
+  fields.setAttribute('aria-label', '研究设置');
+  fields.innerHTML = `
     <label>目标总字数<input id="thesis-target-words" type="number" min="1000" step="1000" value="50000" /></label>
     <label>研究问题与对象边界<textarea id="thesis-question" placeholder="要解释什么问题；研究对象、时间/空间范围是什么"></textarea></label>
-    <label>用户核心观点（每行一条）<textarea id="thesis-viewpoints" placeholder="例如：数字能力通过组织协同影响服务可及性"></textarea></label>
     <label>研究方法<textarea id="thesis-methodology" placeholder="例如：县域面板回归、深度访谈、比较案例研究、内容分析"></textarea></label>
     <label>数据/材料及可用范围<textarea id="thesis-materials" placeholder="数据文件、文献、访谈、案例或文本；说明年份、样本/个案、来源"></textarea></label>
     <label>希望检验或解释的效果<textarea id="thesis-analysis-goal" placeholder="例如：检验数字能力与服务可及性的关系及组织协同机制；不要预设显著性或结论"></textarea></label>
@@ -35,7 +35,6 @@ function createDataEnvironmentCard() {
     <div class="setting-row"><span><strong>数据分析环境</strong><small id="data-environment-detail">检测内置 Python 3.14 与分析依赖。</small></span><span class="status-pill" id="data-environment-badge">检测中</span></div>
     <label>运行环境<select id="data-runtime-mode"><option value="bundled">内置 Python 3.14（推荐）</option><option value="external">自定义 Python（高级）</option></select></label>
     <label id="data-python-path-label" hidden>自定义 Python 路径<input id="data-python-path" type="text" placeholder="填写 Python 的完整路径，留空探测系统环境" /></label>
-    <label class="setting-row"><span><strong>允许分析沙箱联网</strong><small>关闭时沙箱不能联网；开启后，分析代码可连接互联网。点击“保存设置”后对新任务生效。</small></span><input id="data-network-enabled" type="checkbox" /></label>
     <div class="setting-row"><span><small>内置统计和绘图依赖；缺少的库可由 Agent 使用受控 pip 安装。无需额外安装 Python 或 Node.js。</small></span><button id="data-environment-test-button" type="button">检测环境</button></div>
     <code id="data-environment-command" hidden></code>`;
   const ocrStatus = document.createElement('p');
@@ -69,8 +68,8 @@ const ids = [
   'data-python-path', 'data-environment-badge', 'data-environment-detail', 'data-environment-command', 'data-environment-test-button',
   'default-language', 'default-citation', 'writing-style', 'pet-name-input', 'pet-select', 'growth-stage',
   'growth-percent', 'growth-bar', 'growth-next', 'project-dialog', 'project-form', 'project-dialog-title',
-  'project-title', 'project-type', 'project-domains', 'project-language', 'project-citation', 'project-goal', 'project-delete-button',
-  'thesis-profile-fields', 'thesis-target-words', 'thesis-question', 'thesis-viewpoints', 'thesis-methodology', 'thesis-materials', 'thesis-analysis-goal', 'thesis-standard',
+  'project-title', 'project-type', 'project-domains', 'project-goal', 'project-delete-button',
+  'thesis-profile-fields', 'thesis-target-words', 'thesis-question', 'thesis-methodology', 'thesis-materials', 'thesis-analysis-goal', 'thesis-standard',
   'reminder-dialog', 'confirm-dialog', 'confirm-title', 'confirm-message', 'toast',
 ];
 const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
@@ -232,7 +231,7 @@ function switchView(viewName) {
   document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('is-active', button.dataset.view === viewName));
   el['account-menu'].hidden = true;
   if (viewName === 'library') { renderLibrary(); renderRagStatus(); }
-  if (viewName === 'workbench') requestAnimationFrame(scrollConversation);
+  // Switching a panel must not move the conversation's reading position.
 }
 
 function switchSettingsPanel(panelName) {
@@ -381,7 +380,7 @@ function draftLengthNotice(draft) {
 
 function renderConversation() {
   const project = activeProject();
-  el['assemble-thesis-button'].hidden = !(project?.type === '硕士学位论文' && Number(project?.thesisProfile?.targetWords || 0) >= 40000);
+  el['assemble-thesis-button'].hidden = !project;
   const conversationId = project?.activeConversationId;
   // Keep the live exchange mounted while background refreshes update project
   // state. Replacing its parent silently disconnects the node receiving deltas.
@@ -407,6 +406,8 @@ function renderConversation() {
     appendMessageAttachments(userMessage, draft.attachments || []);
 
     const assistantMessage = node('div', 'message assistant-message');
+    assistantMessage.dataset.runId=draft.runId||String(draft.id||'').replace(/^(chat|status):/,'');
+    assistantMessage.dataset.projectId=project.id;assistantMessage.dataset.conversationId=conversationId;
     if (draft.channel === 'chat') {
       assistantMessage.innerHTML = `<div class="assistant-avatar">柴</div><div class="assistant-body"><div class="assistant-meta"><strong>${escapeHtml(settings?.petName || '小柴')}</strong><span>对话回复 · ${new Date(draft.createdAt).toLocaleString('zh-CN')}</span></div><div class="assistant-content"><div class="assistant-flow"></div><div class="assistant-reply"></div></div><div class="message-actions"><button type="button">复制</button></div></div>`;
       const flow = assistantMessage.querySelector('.assistant-flow');
@@ -505,12 +506,15 @@ function showTurnDuration(message, milliseconds) {
 }
 
 function beginTurnClock(stream) {
+  stream.assistantMessage.dataset.runId=stream.requestId;stream.assistantMessage.dataset.projectId=stream.projectId||activeProject()?.id;stream.assistantMessage.dataset.conversationId=stream.conversationId||activeConversation()?.id;
   stream.startedAt = Date.now();
   showTurnDuration(stream.assistantMessage, 0);
   stream.clock = setInterval(() => showTurnDuration(stream.assistantMessage, Date.now() - stream.startedAt), 1000);
 }
 
 function finishTurn(message, { progress, timeline = [], durationMs } = {}) {
+  message.dataset.turnFinished='true';message.querySelector('.turn-live-status')?.remove();
+  message.querySelector('.permission-request')?.remove();
   if (durationMs != null) showTurnDuration(message, durationMs);
   const flow = message.querySelector('.assistant-flow');
   if (flow && !flow.querySelector('.saved-task-snapshot') && progress?.steps?.some(step => !step.id.startsWith('$'))) {
@@ -532,7 +536,6 @@ function finishTurn(message, { progress, timeline = [], durationMs } = {}) {
     const time = message.querySelector('.turn-duration');
     process.querySelector(':scope > summary').replaceChildren(time);
     process.open = false;
-    for (const group of flow.querySelectorAll('.agent-activity-log')) group.replaceWith(...group.querySelector('.agent-activity-items').childNodes);
     for (const details of flow.querySelectorAll('details')) details.open = false;
   }
   const text = TaskProgress.completedSummary(progress, timeline);
@@ -545,6 +548,7 @@ function finishTurn(message, { progress, timeline = [], durationMs } = {}) {
     ChatMarkdown.render(summary, [text, ...outcomes, remaining].filter(Boolean).join('\n\n'), { hideArtifacts: true });
   }
   for (const files of message.querySelectorAll('.turn-artifacts')) files.open = true;
+  void window.TurnExperience?.finalize(message);
 }
 
 async function restoreTurnTrace(draft, message, projectId, conversationId) {
@@ -594,7 +598,7 @@ function appendToolActivity(flow, activity) {
   if (!log?.classList.contains('agent-activity-log')) { appendConversationActivity(flow, '查看执行过程', false); log = flow.lastElementChild; }
   const host = log.querySelector('.agent-activity-items');
   const id = activity.toolCallId || `${activity.taskId || ''}:${activity.toolName}`;
-  let detail = [...host.querySelectorAll('.agent-tool-detail')].find(item => item.dataset.toolCallId === id);
+  let detail = [...flow.querySelectorAll('.agent-tool-detail')].find(item => item.dataset.toolCallId === id);
   if (!detail) {
     detail = node('details', 'agent-tool-detail'); detail.dataset.toolCallId = id;
     detail.append(node('summary'), node('div', 'agent-tool-content')); host.append(detail);
@@ -616,11 +620,17 @@ function appendToolActivity(flow, activity) {
   const code = activity.detail?.code || (activity.toolName === 'collect_data' ? output?.code : '');
   if (code) section('code', '本轮实际生成／执行的代码', String(code).slice(0, 16000));
   if (activity.state === 'failed') section('error', '未完成的原因', String(activity.detail?.output || '请重试当前步骤').split('Received arguments:')[0].slice(0, 1200));
-  const expandable = !!content.querySelector('[data-section="code"], [data-section="error"]');
+  const input=activity.detail?.input;
+  if(input){const lines=[];for(const [key,label] of [['dataFile','数据文件'],['query','检索内容'],['id','资料标识'],['path','读取路径'],['offset','读取起点'],['stepId','分析步骤'],['name','依赖名称']])if(input[key]!==undefined)lines.push(`${label}：${String(input[key]).slice(0,300)}`);if(input.selection)lines.push(`数据范围：${JSON.stringify(input.selection).slice(0,1000)}`);if(lines.length)section('scope','本次操作范围',lines.join('\n'));}
+  if(output){const lines=[];for(const [key,label] of [['summary','结果摘要'],['status','处理状态'],['rows','记录数'],['sampleSize','样本数'],['sheet','工作表'],['nextOffset','后续读取起点']])if(output[key]!==undefined&&output[key]!==null)lines.push(`${label}：${String(output[key]).slice(0,2500)}`);if(output.profile?.rows!==undefined)lines.push(`核验记录：${output.profile.rows} 行`);if(Array.isArray(output.columns))lines.push(`字段：${output.columns.map(item=>typeof item==='string'?item:item.name).join('、').slice(0,1000)}`);if(activity.toolName==='read_research_skill')lines.push('已读取技能指导；其中的示例代码不代表本轮实际执行。');if(lines.length)section('result','执行结果',lines.join('\n'));}
+  detail.dataset.toolName=activity.toolName;detail.dataset.state=activity.state;
+  const elapsed=activity.durationMs==null?'':` · ${TaskProgress.duration(activity.durationMs)}`;
+  const expandable = !!content.childElementCount;
   detail.classList.toggle('has-detail', expandable);
-  detail.querySelector('summary').textContent = `${names[activity.toolName] || '处理当前任务'} · ${states[activity.state] || activity.state}${expandable ? ' · 查看' + (code || content.querySelector('[data-section="code"]') ? '代码' : '原因') : ''}`;
+  detail.querySelector('summary').textContent = `${names[activity.toolName] || '处理当前任务'} · ${states[activity.state] || activity.state}${elapsed}${expandable ? ' · 查看详情' : ''}`;
   if (!expandable) { detail.open = false; content.replaceChildren(); }
   content.querySelector('[data-section="output"]')?.remove();
+  const group=detail.closest('.agent-activity-log');if(group){const operations=[...group.querySelectorAll('.agent-tool-detail')],running=operations.filter(item=>item.dataset.state==='running').length;group.querySelector('summary').textContent=`操作记录 · ${operations.length} 项${running?` · ${running} 项执行中`:''}`;}
 
 
 }
@@ -653,7 +663,7 @@ function appendStreamingExchange(task, attachments = []) {
   assistantMessage.innerHTML = `<div class="assistant-avatar">柴</div><div class="assistant-body"><div class="assistant-meta"><strong>${escapeHtml(settings?.petName || '小柴')}</strong><span>AI 正在处理</span></div><div class="assistant-flow"></div><div class="task-outputs"></div><div class="assistant-reply"></div><div class="message-actions"></div><p class="ai-warning">内容由AI生成，请仔细甄别。</p></div>`;
   exchange.append(userMessage, assistantMessage);
   el.conversation.append(exchange);
-  scrollConversation();
+  chatFollowsLatest=true; scrollConversation(true);
   return { exchange, assistantMessage, reply: assistantMessage.querySelector('.assistant-reply'), meta: assistantMessage.querySelector('.assistant-meta span') };
 }
 
@@ -680,11 +690,14 @@ function listMarkup(values = []) {
   return values.length ? `<ul>${values.map((value) => `<li>${escapeHtml(typeof value === 'string' ? value : JSON.stringify(value))}</li>`).join('')}</ul>` : '<p>本次没有相关条目</p>';
 }
 
-function scrollConversation() {
+let chatFollowsLatest = true;
+function scrollConversation(force = false) {
+  if (!force && !chatFollowsLatest) return;
   el['chat-scroll'].scrollTop = el['chat-scroll'].scrollHeight;
 }
 
 function updateComposerAction() {
+  window.dispatchEvent(new Event('turn-state-change'));
   const hasTask = Boolean(el['task-input'].value.trim());
   if (streamingDraft) {
     el['send-button'].disabled = false;
@@ -727,6 +740,7 @@ function createLibraryRow(document) {
     ? `<em title="${escapeHtml(document.parseError)}">${escapeHtml(document.parseError)}</em>`
     : '';
   row.dataset.status = document.status;
+  row.dataset.documentId = document.id;
   row.innerHTML = `<span class="file-type">${escapeHtml(type.slice(0, 4))}</span><div><strong>${escapeHtml(document.name)}</strong><small>${formatSize(document.size)} · ${statusLabels[document.status] ?? statusLabels.saved}</small>${detail}</div><button type="button" aria-label="删除资料">×</button>`;
   row.querySelector('button').addEventListener('click', async () => {
     if (!await confirmAction('删除资料', `删除“${document.name}”后，它将不能作为引用来源。`)) return;
@@ -756,9 +770,11 @@ function renderLibrary() {
   el['library-list'].replaceChildren();
   if (!documents.length) {
     el['library-list'].innerHTML = query||window.ProjectExperience?.hasLibraryFilters() ? '<div class="empty-page"><strong>未找到匹配资料</strong><p>试试其他关键词，或清除筛选。</p></div>' : '<div class="empty-page"><strong>还没有项目资料</strong><p>拖入文件或点击“添加资料”开始。</p></div>';
+    window.ProjectExperience?.groupLibrary(documents);
     return;
   }
   for (const document of documents) el['library-list'].append(createLibraryRow(document));
+  window.ProjectExperience?.groupLibrary(documents);
 }
 
 async function renderRagStatus() {
@@ -846,19 +862,16 @@ function openProjectDialog(project = null) {
     ? project.domains
     : (project?.domain && project.domain !== '未分类' ? project.domain.split(/[、,，]/).map((item) => item.trim()) : []);
   el['project-domains'].querySelectorAll('input[name="project-domain"]').forEach((input) => { input.checked = domains.includes(input.value); });
-  el['project-language'].value = project?.language ?? settings?.defaultLanguage ?? '中文';
-  el['project-citation'].value = project?.citationStyle ?? settings?.defaultCitation ?? 'GB/T 7714';
   el['project-goal'].value = project?.goal ?? '';
   const profile = project?.thesisProfile ?? {};
-  el['thesis-target-words'].value = profile.targetWords ?? 50000;
+  el['thesis-target-words'].value = profile.targetWords ?? ({'课程论文':6000,'开题报告':6000,'期刊论文':10000,'研究报告':12000,'博士学位论文':80000}[el['project-type'].value]||50000);
   el['thesis-question'].value = profile.researchQuestion ?? '';
-  el['thesis-viewpoints'].value = (profile.viewpoints ?? []).map((item) => typeof item === 'string' ? item : item.statement).join('\n');
   el['thesis-methodology'].value = profile.methodology ?? '';
   el['thesis-materials'].value = profile.dataMaterials ?? '';
   el['thesis-analysis-goal'].value = profile.analysisGoal ?? '';
   el['thesis-standard'].value = profile.schoolOrJournal ?? '';
-  el['thesis-profile-fields'].hidden = el['project-type'].value !== '硕士学位论文';
-  el['project-form'].querySelector('.project-optional')?.removeAttribute('open');
+  el['thesis-profile-fields'].hidden = false;
+  window.ResearchProject?.open(project);
   el['project-delete-button'].hidden = !project;
   el['project-dialog'].showModal();
 }
@@ -867,12 +880,15 @@ async function saveProject(event) {
   if (event.submitter?.value === 'cancel') return;
   event.preventDefault();
   const domains = [...el['project-domains'].querySelectorAll('input[name="project-domain"]:checked')].map((input) => input.value);
+  const researchProfile=window.ResearchProject?.read()||{};
+  if(researchProfile.invalid)return;
   const input = {
-    title: el['project-title'].value.trim(), type: el['project-type'].value, domains, language: el['project-language'].value, citationStyle: el['project-citation'].value, goal: el['project-goal'].value.trim(),
+    title: el['project-title'].value.trim(), type: el['project-type'].value, domains, goal: el['project-goal'].value.trim(),
     thesisProfile: {
+      ...(editingProjectId ? workspace.projects.find(p=>p.id===editingProjectId)?.thesisProfile : {}),
+      ...researchProfile,
       targetWords: Number(el['thesis-target-words'].value) || 50000,
       researchQuestion: el['thesis-question'].value.trim(),
-      viewpoints: el['thesis-viewpoints'].value.trim(),
       methodology: el['thesis-methodology'].value.trim(),
       dataMaterials: el['thesis-materials'].value.trim(),
       analysisGoal: el['thesis-analysis-goal'].value.trim(),
@@ -928,11 +944,12 @@ async function chooseConversationFiles(folder = false, paths = null) {
       renderAll();
     }
     const projectId = activeProject().id;
-    const result = paths ? await window.petAPI.importConversationFiles(projectId, paths) : await window.petAPI.chooseConversationFiles(projectId, folder);
+    const importingConversationId=activeConversation()?.id;
+    const result = paths ? await window.petAPI.importConversationFiles(projectId, paths, importingConversationId) : await window.petAPI.chooseConversationFiles(projectId, folder, importingConversationId);
     const attachments = Array.isArray(result) ? result : result.attachments;
     if (!attachments?.length) { if (result.rejected?.length) showToast(`没有导入文件：${result.rejected[0].reason}`, true); return; }
     workspace = await window.petAPI.loadWorkspace();
-    if (activeProject()?.id === projectId) {
+    if (activeProject()?.id === projectId && activeConversation()?.id === importingConversationId) {
       const selected = new Map();
       for (const item of [...conversationAttachments, ...attachments]) {
         const data = ['.csv', '.xlsx'].includes(String(item.extension || '').toLowerCase());
@@ -1069,15 +1086,14 @@ async function openUploadedAttachment(attachment, page = 1, sheet = 0) {
   const project = activeProject(), conversation = activeConversation(); if (!project) return showToast('请先选择文件所属项目。',true);
   const conversationId=conversation?.id;
   const sequence = ++previewReadSequence;
-  empiricalPreviewScope=`${project.id}/${project.activeConversationId}`;previewOpenKeys=[];previewSelectedArtifact=null;
-  document.getElementById('preview-document-controls').replaceChildren();
+  empiricalPreviewScope=`${project.id}/${project.activeConversationId}`;
   el['empirical-preview'].hidden=false;document.querySelector('.chat-view').classList.add('has-empirical-preview');
-  const content=el['empirical-preview-content'];content.replaceChildren();el['empirical-preview-tabs'].replaceChildren();el['empirical-preview-title'].textContent=attachment.name||'文件预览';el['preview-open-menu'].hidden=true;
+  const content=el['empirical-preview-content'];
   const waiting=node('p');waiting.setAttribute('role','status');waiting.textContent='正在加载文档预览…';content.append(waiting);syncProgressCardSpace();
   try {
     const data = await window.petAPI.getUploadedFilePreview(project.id, conversationId, attachment.id, page, sheet);
     if (sequence !== previewReadSequence || project.id !== activeProject()?.id || conversationId !== activeConversation()?.id) return;
-    empiricalPreviewScope = `${project.id}/${project.activeConversationId}`; previewOpenKeys = [];
+    empiricalPreviewScope = `${project.id}/${project.activeConversationId}`; waiting.remove();
     el['empirical-preview'].hidden = false; document.querySelector('.chat-view').classList.add('has-empirical-preview');
     const source = { kind: 'upload', uploadId: attachment.id };
     renderArtifactPreview([{ type: 'upload', name: data.name, text: data.text || '', upload: data, attachment, source, readOnly: true }]);
@@ -1312,6 +1328,9 @@ function ensureSkillMenu() {
   const actions = [
     { op: 'polish', label: '润色这段' },
     { op: 'expand', label: '扩写这段' },
+    { op: 'compress', label: '压缩这段' },
+    { op: 'translate', label: '译为学术英文' },
+    { op: 'restructure', label: '改善论证衔接' },
     { op: 'empirical', label: '改实证风格' },
   ];
   for (const action of actions) {
@@ -1579,7 +1598,6 @@ function openPlanPreview(plan) {
     lines.push(...(plan.steps || []).map((item, index) => `${index + 1}. ${item.label}\n   方法：${item.specification}\n   目的：${item.purpose}\n   产出：${item.outputs || '结果表'}`), '', `缺失处理：${plan.missingDataPolicy || '按步骤设定'}`, `解释边界：${plan.interpretationLimits || '按研究设计说明限制'}`);
   }
   empiricalPreviewScope = `${activeProject()?.id}/${activeConversation()?.id}`;
-  previewOpenKeys = [];
   el['empirical-preview'].hidden = false;
   document.querySelector('.chat-view').classList.add('has-empirical-preview');
   renderArtifactPreview([{ type: 'plan', plan, name: `${title}.md`, text: lines.join('\n'), source: { planId: plan.id, revision: plan.revision, kind: 'plan' } }]);
@@ -1657,6 +1675,8 @@ function closeEmpiricalPreview() {
   el['preview-expand'].querySelector('.codicon')?.classList.remove('codicon-screen-normal');
   el['preview-expand'].querySelector('.codicon')?.classList.add('codicon-screen-full');
   previewOpenKeys = [];
+  previewCatalog = []; previewCatalogScope = ''; previewViews.clear();
+  el['empirical-preview-content'].replaceChildren();
   syncProgressCardSpace();
 }
 
@@ -1667,14 +1687,11 @@ async function openEmpiricalPreview(selection = null) {
   if (!project || !conversation) return;
   const scope = `${project.id}/${conversation.id}`;
   const readSequence = ++previewReadSequence;
-  document.getElementById('preview-document-controls').replaceChildren();
   if (empiricalPreviewScope !== scope) previewOpenKeys = [];
   empiricalPreviewScope = scope;
-  previewSelectedArtifact = null;
   el['empirical-preview'].hidden = false;
   document.querySelector('.chat-view').classList.add('has-empirical-preview');
-  const content = el['empirical-preview-content']; content.replaceChildren();
-  el['empirical-preview-tabs'].replaceChildren(); el['empirical-preview-title'].textContent = '文件预览';
+  const content = el['empirical-preview-content'];
   const waiting = node('p'); waiting.textContent = '正在读取当前对话的实证结果…'; content.append(waiting);
   try {
     const preview = await window.petAPI.getEmpiricalResultPreview(project.id, conversation.id, selection?.revision);
@@ -1692,15 +1709,17 @@ async function openEmpiricalPreview(selection = null) {
       artifacts.push({ type: 'text', name: `${stepLabel} · analysis-result.json`, text: JSON.stringify(data, null, 2), source: source('json') });
     }
     if (selection && !artifacts.some(artifact => artifactKey(artifact.source) === artifactKey(selection))) throw new Error('该结果文件已不可用');
-    renderArtifactPreview(artifacts, selection && artifactKey(selection));
+    waiting.remove(); renderArtifactPreview(artifacts, selection && artifactKey(selection));
   } catch (error) { if (readSequence === previewReadSequence && empiricalPreviewScope === scope) waiting.textContent = `预览失败：${error.message}`; }
   syncProgressCardSpace();
 }
 
 let previewOpenKeys = [], previewSelectedArtifact = null, previewReadSequence = 0;
+let previewCatalogScope = '', previewCatalog = [], previewViews = new Map();
 function artifactKey(source) { return JSON.stringify([source?.planId, source?.revision, source?.stepId, source?.kind, source?.index, source?.draftId,source?.uploadId,source?.preparationId]); }
 
 function appendArtifactLinks(host, artifacts, project) {
+  if(window.TurnExperience){TurnExperience.addArtifacts(host,artifacts,project);return;}
   if (!artifacts.length) return;
   const group = node('details', 'turn-artifacts');
   const summary = node('summary'); summary.textContent = `本轮文件（${artifacts.length}）`; group.append(summary);
@@ -1740,7 +1759,7 @@ el.conversation.addEventListener('artifact-link', async event => {
     } else if (url.hostname === 'preparation') {
       const data = await window.petAPI.getPreparationPreview(project.id, conversation.id, parts[0]);
       empiricalPreviewScope = `${project.id}/${conversation.id}`;
-      previewOpenKeys = []; el['empirical-preview'].hidden = false; document.querySelector('.chat-view').classList.add('has-empirical-preview');
+      el['empirical-preview'].hidden = false; document.querySelector('.chat-view').classList.add('has-empirical-preview');
       renderArtifactPreview([{ type: 'text', name: data.name, text: data.text,filePreview:data.preview||textFilePreview(data.name,data.text), source: { kind: 'preparation', preparationId: parts[0] } }]);
       syncProgressCardSpace();
     }
@@ -1752,7 +1771,6 @@ function openPaperPreview(draft) {
   switchView('workbench');
   previewReadSequence++;
   empiricalPreviewScope = `${activeProject()?.id}/${activeConversation()?.id}`;
-  previewOpenKeys = [];
   el['empirical-preview'].hidden = false; document.querySelector('.chat-view').classList.add('has-empirical-preview');
   renderArtifactPreview([{ type: 'paper', name: `${draft.title || '论文草稿'}.docx`, html: draft.content, draft, source: { draftId: draft.id } }]);
   syncProgressCardSpace();
@@ -1762,7 +1780,19 @@ function renderArtifactPreview(artifacts, selectedKey = null) {
   if (!WritingWorkbench.canLeave()) return;
   WritingWorkbench.dismissInspectors();
   const tabs = el['empirical-preview-tabs'], content = el['empirical-preview-content'];
-  tabs.replaceChildren(); content.replaceChildren();
+  const requestedKey = selectedKey || (artifacts[0] && artifactKey(artifacts[0].source));
+  if (previewCatalogScope !== empiricalPreviewScope) {
+    previewCatalogScope = empiricalPreviewScope; previewCatalog = []; previewOpenKeys = []; previewViews.clear();
+    content.replaceChildren(); document.getElementById('preview-document-controls').replaceChildren();
+  }
+  for (const artifact of artifacts) {
+    const key=artifactKey(artifact.source),old=previewCatalog.findIndex(item=>artifactKey(item.source)===key);
+    if(old<0)previewCatalog.push(artifact);else if(JSON.stringify(previewCatalog[old])!==JSON.stringify(artifact)){
+      previewCatalog[old]=artifact;const view=previewViews.get(key);view?.viewer.remove();view?.controls.forEach(control=>control.remove());previewViews.delete(key);
+    }
+  }
+  artifacts=previewCatalog; selectedKey=requestedKey;
+  tabs.replaceChildren();
   el['preview-project'].textContent = activeProject()?.title || '当前项目';
   const picker = el['preview-file-list']; picker.replaceChildren();
   let selected = artifacts.find(artifact => artifactKey(artifact.source) === selectedKey) || artifacts[0];
@@ -1770,14 +1800,20 @@ function renderArtifactPreview(artifacts, selectedKey = null) {
   const open = artifacts.filter(artifact => previewOpenKeys.includes(artifactKey(artifact.source)));
   const show = (artifact, index) => {
     if(!WritingWorkbench.canLeave())return;
-    document.getElementById('preview-document-controls').replaceChildren();
+    const controlsHost=document.getElementById('preview-document-controls');
+    if(previewSelectedArtifact){const old=previewViews.get(artifactKey(previewSelectedArtifact.source));if(old)old.scrollTop=content.scrollTop;}
+    for(const view of previewViews.values()){view.viewer.hidden=true;view.controls.forEach(control=>control.hidden=true);}
     previewSelectedArtifact = artifact;
     el['preview-open-menu'].hidden = artifact.source?.kind === 'upload';
     el['preview-copy'].disabled = (artifact.type === 'upload'||artifact.filePreview) && !artifact.text&&artifact.type!=='table';
     previewArtifactName = artifact.name;
     el['empirical-preview-title'].textContent = artifact.name;
     for (const [i, button] of [...tabs.querySelectorAll('[role="tab"]')].entries()) { button.setAttribute('aria-selected', String(i === index)); button.tabIndex = i === index ? 0 : -1; }
-    content.replaceChildren();
+    const activeTab=tabs.querySelector('[aria-selected="true"]');
+    if(activeTab){const box=activeTab.parentElement.getBoundingClientRect(),viewport=tabs.getBoundingClientRect();if(box.right>viewport.right)tabs.scrollLeft+=box.right-viewport.right;else if(box.left<viewport.left)tabs.scrollLeft-=viewport.left-box.left;}
+    const cached=previewViews.get(artifactKey(artifact.source));
+    if(cached){cached.viewer.hidden=false;cached.controls.forEach(control=>control.hidden=false);content.scrollTop=cached.scrollTop||0;return;}
+    const priorControls=new Set(controlsHost.children);
     const viewer = node('div', `artifact-viewer artifact-${artifact.type}`);
     if(artifact.filePreview)viewer.classList.add('artifact-file-preview');
     const zoomElement=target=>document.getElementById('preview-document-controls').append(documentZoomControl(value=>{target.style.zoom=value==='fit'?'1':String(Number(value)/100);}));
@@ -1801,7 +1837,7 @@ function renderArtifactPreview(artifacts, selectedKey = null) {
         const frame = node('iframe', 'docx-native-frame'); frame.title = `${artifact.name} 只读预览`; frame.setAttribute('sandbox', 'allow-scripts');
         const ready = event => {
           if (event.source !== frame.contentWindow) return;
-          if (event.data?.type === 'docx-rendered') {status.hidden=true;frame.title=`${artifact.name} · 全文只读`;frame.contentWindow.postMessage({type:'preview-zoom',value:document.querySelector('#preview-document-controls select')?.value||'fit'},'*');}
+          if (event.data?.type === 'docx-rendered') {status.hidden=true;frame.title=`${artifact.name} · 全文只读`;frame.contentWindow.postMessage({type:'preview-zoom',value:zoom.querySelector('select').value},'*');}
           if (event.data?.type === 'docx-render-error') status.textContent = 'DOCX 原格式预览失败，请检查文件是否有效或加密；不会退化为截断文本。';
         };
         window.addEventListener('message', ready);
@@ -1814,11 +1850,11 @@ function renderArtifactPreview(artifacts, selectedKey = null) {
       } else if (data.type === 'spreadsheet') {
         const status = node('p'); status.textContent = '正在加载完整表格…';
         const frame = node('iframe', 'docx-native-frame'); frame.title = `${artifact.name} 工作表只读预览`; frame.setAttribute('sandbox', 'allow-scripts');
-        const ready = event => { if(event.source!==frame.contentWindow)return; if(event.data?.type==='spreadsheet-rendered'){status.hidden=true;frame.title=`${artifact.name} · ${event.data.rows} 行、${event.data.columns} 列 · 只读`;frame.contentWindow.postMessage({type:'preview-zoom',value:document.querySelector('#preview-document-controls select')?.value||'100'},'*');}if(event.data?.type==='spreadsheet-render-error'){status.hidden=false;status.textContent='表格预览失败，请检查文件是否有效或加密。';} };
+        const ready = event => { if(event.source!==frame.contentWindow)return; if(event.data?.type==='spreadsheet-rendered'){status.hidden=true;frame.title=`${artifact.name} · ${event.data.rows} 行、${event.data.columns} 列 · 只读`;frame.contentWindow.postMessage({type:'preview-zoom',value:sheetZoom.querySelector('select').value},'*');}if(event.data?.type==='spreadsheet-render-error'){status.hidden=false;status.textContent='表格预览失败，请检查文件是否有效或加密。';} };
         window.addEventListener('message',ready);
         const observer=new MutationObserver(()=>{if(!frame.isConnected){window.removeEventListener('message',ready);observer.disconnect();}});observer.observe(content,{childList:true,subtree:true});
         frame.addEventListener('load', () => frame.contentWindow.postMessage({ type: 'render-spreadsheet', bytes: Uint8Array.from(atob(data.dataBase64),char=>char.charCodeAt(0)),sheet:data.sheet,format:data.format }, '*'));
-        document.getElementById('preview-document-controls').append(documentZoomControl(value=>frame.contentWindow.postMessage({type:'preview-zoom',value},'*'),'100'));
+        const sheetZoom=documentZoomControl(value=>frame.contentWindow.postMessage({type:'preview-zoom',value},'*'),'100');document.getElementById('preview-document-controls').append(sheetZoom);
         frame.src = './spreadsheet-preview.html'; viewer.append(status, frame);
       } else if (data.type === 'document') {
         renderContinuousPdf(viewer,artifact,data);
@@ -1844,6 +1880,8 @@ function renderArtifactPreview(artifacts, selectedKey = null) {
     }
     window.ReadingTools?.mount(viewer,artifact);
     content.append(viewer);
+    const controls=[...controlsHost.children].filter(control=>!priorControls.has(control));
+    previewViews.set(artifactKey(artifact.source),{viewer,controls,scrollTop:0});content.scrollTop=0;
   };
   for (const artifact of artifacts) {
     const item = node('button'); item.type = 'button'; item.textContent = artifact.name;
@@ -1863,7 +1901,7 @@ function renderArtifactPreview(artifacts, selectedKey = null) {
     });
     const close = node('button', 'preview-tab-close'); close.type = 'button'; close.setAttribute('aria-label', `关闭 ${artifact.name}`);
     const closeIcon = node('span', 'codicon codicon-close'); closeIcon.setAttribute('aria-hidden', 'true'); close.append(closeIcon);
-    close.addEventListener('click', () => { if(!WritingWorkbench.canLeave())return;previewOpenKeys = previewOpenKeys.filter(key => key !== artifactKey(artifact.source)); if (!previewOpenKeys.length) closeEmpiricalPreview(); else renderArtifactPreview(artifacts, previewOpenKeys.at(-1)); });
+    close.addEventListener('click', () => { if(!WritingWorkbench.canLeave())return;const key=artifactKey(artifact.source),current=artifactKey(previewSelectedArtifact?.source),view=previewViews.get(key);view?.viewer.remove();view?.controls.forEach(control=>control.remove());previewViews.delete(key);previewOpenKeys = previewOpenKeys.filter(item => item !== key); if (!previewOpenKeys.length) closeEmpiricalPreview(); else renderArtifactPreview(artifacts, current!==key&&previewOpenKeys.includes(current)?current:previewOpenKeys.at(-1)); });
     wrap.append(tab, close); tabs.append(wrap);
   }
   if (selected) show(selected, open.indexOf(selected));
@@ -1941,6 +1979,15 @@ function renderProgressCard(progress) {
 }
 
 // —— codex 式执行过程流：实时显示"正在执行哪个任务"，完成的打勾 ——
+function renderPermissionRequest(){
+  const stream=streamingDraft;if(!stream)return;
+  const host=stream.assistantMessage,waiting=stream.waitingInteraction;host.querySelector('.permission-request')?.remove();
+  if(waiting?.kind!=='permission')return;
+  const card=node('section','permission-request'),title=node('strong'),detail=node('p'),actions=node('div','workbench-actions');card.setAttribute('aria-label','操作权限确认');
+  title.textContent=`允许${waiting.reference.label}？`;detail.textContent=waiting.reference.detail||'仅执行当前项目中的本次操作';
+  for(const [action,label] of [['deny','不允许'],['approve','允许本次']]){const button=node('button',action==='approve'?'primary-button':'secondary-button');button.type='button';button.textContent=label;button.onclick=async()=>{for(const b of actions.children)b.disabled=true;try{await window.petAPI.respondAgentInteraction({runId:stream.requestId,projectId:stream.projectId,conversationId:stream.conversationId,kind:'permission',reference:waiting.reference,action});card.remove();}catch(error){showToast(error.message,true);for(const b of actions.children)b.disabled=false;}};actions.append(button);}
+  card.append(title,detail,actions);host.append(card);scrollConversation();
+}
 function handleTaskStatus(payload) {
   if (!streamingDraft || payload?.requestId !== streamingDraft.requestId) return;
   if (payload.stage === 'turn-files') {
@@ -1975,12 +2022,15 @@ function handleTaskStatus(payload) {
   if (payload.stage === 'interaction-wait' || payload.stage === 'interaction-continue') {
     streamingDraft.waitingInteraction = payload.stage === 'interaction-wait' ? payload.interaction : null;
     streamingDraft.meta.textContent = payload.stage === 'interaction-wait' ? '等待你的确认 · 确认后自动继续' : '正在继续当前任务';
+    window.TurnExperience?.activity(streamingDraft.assistantMessage,streamingDraft.meta.textContent);
+    renderPermissionRequest();
     const project = activeProject(), conversation = activeConversation();
     renderEmpiricalPlan(project?.empiricalPlans?.[conversation?.id]);
     renderClarificationCard(project?.clarifications?.[conversation?.id]);
     return;
   }
   if (payload.stage === 'prepared-data') {
+    window.TurnExperience?.addArtifacts(streamingDraft.assistantMessage.querySelector('.assistant-body'),[{name:'清洗后的分析数据.csv',kind:'preparation',preparationId:payload.preparation.id}],activeProject());
     appendConversationActivity(streamingDraft.assistantMessage.querySelector('.assistant-flow'), payload.preparation.summary);
     streamingDraft.preparation = payload.preparation;
     streamingDraft.assistantMessage.querySelectorAll('.prepared-file-link').forEach(link => link.remove());
@@ -1993,6 +2043,7 @@ function handleTaskStatus(payload) {
     const label = payload.stage === 'activity' ? (payload.state === 'thinking' ? '模型正在组织回复…' : `${tools[payload.toolName] || '处理任务所需资料'}${payload.state === 'completed' ? ' · 已完成' : payload.state === 'failed' ? ' · 未成功' : '…'}`) : activityLabels[payload.stage];
     if (payload.stage === 'activity' && payload.state !== 'thinking') appendToolActivity(streamingDraft.assistantMessage.querySelector('.assistant-flow'), payload);
     streamingDraft.meta.textContent = label;
+    window.TurnExperience?.activity(streamingDraft.assistantMessage,label);
     if (payload.stage === 'activity') { scrollConversation(); return; }
   }
   if (['empirical-plan', 'empirical-results'].includes(payload.stage)) { const project = activeProject(); project.empiricalPlans = { ...(project.empiricalPlans || {}), [activeConversation().id]: payload.analysisPlan }; renderEmpiricalPlan(payload.analysisPlan); if (previewSelectedArtifact?.type === 'plan' && previewSelectedArtifact.source.planId === payload.analysisPlan.id) openPlanPreview(payload.analysisPlan); scrollConversation(); return; }
@@ -2192,11 +2243,17 @@ async function loadSettingsForm() {
   el['data-python-path-label'].hidden = el['data-runtime-mode'].value !== 'external';
   if (el['data-python-path']) el['data-python-path'].value = settings.dataEnvironment?.pythonPath || '';
   el['data-network-enabled'].checked = settings.dataEnvironment?.networkEnabled === true;
+  const permissions=settings.permissions||{};
+  document.getElementById('permission-approval').value=permissions.approvalPolicy||'on-request';
+  document.getElementById('permission-sandbox').value=permissions.sandboxMode||'project';
+  document.getElementById('permission-web').value=permissions.webAccess||(settings.dataEnvironment?.networkEnabled?'collect':'off');
+  document.getElementById('permission-dependencies').value=permissions.dependencyInstall||'allow';
   renderApiProvider();
   await renderAgentApiConfigs();
   el['default-language'].value = settings.defaultLanguage || '中文';
   el['default-citation'].value = settings.defaultCitation || 'GB/T 7714';
   el['writing-style'].value = settings.writingStyle || 'rigorous';
+  window.SettingsExperience?.load(settings);
   el['pet-name-input'].value = settings.petName || '小焰';
   el['pet-select'].value = settings.pet || 'ember-pup';
   renderPetPreview(settings.pet || 'ember-pup');
@@ -2222,6 +2279,8 @@ async function saveSettings(event) {
     defaultLanguage: el['default-language'].value,
     defaultCitation: el['default-citation'].value,
     writingStyle: el['writing-style'].value,
+    ...(window.SettingsExperience?{documentFormatting:SettingsExperience.collect()}:{}),
+    permissions:{approvalPolicy:document.getElementById('permission-approval').value,sandboxMode:document.getElementById('permission-sandbox').value,webAccess:document.getElementById('permission-web').value,dependencyInstall:document.getElementById('permission-dependencies').value,sandboxNetwork:el['data-network-enabled'].checked},
     ...(el['data-python-path'] ? { dataEnvironment: { runtimeMode: el['data-runtime-mode'].value, pythonPath: el['data-python-path'].value.trim(), networkEnabled: el['data-network-enabled'].checked } } : {}),
   };
   await window.petAPI.saveSettings(partial);
@@ -2346,7 +2405,7 @@ function bindEvents() {
   el['settings-back-button'].addEventListener('click', () => switchView('workbench'));
   el['project-edit-button'].addEventListener('click', () => activeProject() && openProjectDialog(activeProject()));
   el['project-form'].addEventListener('submit', saveProject);
-  el['project-type'].addEventListener('change', () => { el['thesis-profile-fields'].hidden = el['project-type'].value !== '硕士学位论文'; });
+  el['project-type'].addEventListener('change', () => { el['thesis-profile-fields'].hidden = false; });
   el['project-delete-button'].addEventListener('click', async () => { const project = activeProject(); if (!project) return; el['project-dialog'].close(); if (!await confirmAction('删除整个项目', `将删除“${project.title}”及其本地资料与写作记录。`)) return; workspace = await window.petAPI.deleteProject(project.id); renderAll(); });
   el['new-chat-button'].addEventListener('click', createNewConversation);
   el['sidebar-new-chat-button'].addEventListener('click', createNewConversation);

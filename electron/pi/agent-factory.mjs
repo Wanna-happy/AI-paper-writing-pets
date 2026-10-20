@@ -57,6 +57,7 @@ export function createRoleAgent({ layer, role, systemPrompt, tools = [], scenari
 // Validate the terminal message; even nonempty partial output is not success.
 export async function runAgent(agent, message, { onDelta = null, onTextReset = null, onCommentaryCommit = null, onActivity = null, signal = null } = {}) {
   let finalMessage = null;
+  const toolStarts=new Map();
   let hasToolCall = false;
   let thinkingReported = false;
   let messageText = '';
@@ -69,10 +70,11 @@ export async function runAgent(agent, message, { onDelta = null, onTextReset = n
   const abort = () => agent.abort();
   signal?.addEventListener('abort', abort, { once: true });
   const unsubscribe = agent.subscribe((event) => {
-    if (event?.type === 'tool_execution_start') onActivity?.({ toolName: event.toolName, toolCallId: event.toolCallId, state: 'running', detail: { input: event.args } });
+    if (event?.type === 'tool_execution_start') {toolStarts.set(event.toolCallId,Date.now());onActivity?.({ toolName: event.toolName, toolCallId: event.toolCallId, state: 'running', detail: { input: event.args } });}
     if (event?.type === 'tool_execution_end') {
       const output = (event.result?.content || []).filter(item => item.type === 'text').map(item => item.text).join('\n').slice(0, 6000);
-      onActivity?.({ toolName: event.toolName, toolCallId: event.toolCallId, state: event.isError ? 'failed' : 'completed', detail: { output } });
+      const started=toolStarts.get(event.toolCallId);toolStarts.delete(event.toolCallId);
+      onActivity?.({ toolName: event.toolName, toolCallId: event.toolCallId, state: event.isError ? 'failed' : 'completed', ...(started===undefined?{}:{durationMs:Date.now()-started}), detail: { output } });
     }
     if (event?.type === 'message_start' && event.message?.role === 'assistant') {
       hasToolCall = false;

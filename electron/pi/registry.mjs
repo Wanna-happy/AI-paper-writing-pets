@@ -10,18 +10,19 @@ import pipelinePrompts from '../agent/pipeline-prompts.js';
 
 // 角色定义。新增角色只需在这里加一项，Planner 和 RunEngine 会自动适配。
 export const ROLE_DEFINITIONS = {
-  collector: { id: 'collector', name: '搜索与数据采集 Agent', scenario: 'chat', description: '按任务实际检索公开来源或采集数据，交付来源与数据文件；已有数据足够时不新增采集。', tools: ['search_web', 'collect_data', 'retrieve_context', 'submit_clarification', 'read_conversation_history', 'search_research_skills', 'read_research_skill'], systemPrompt: pipelinePrompts.COLLECTOR },
+  collector: { id: 'collector', name: '搜索与数据采集 Agent', scenario: 'chat', description: '按任务实际检索公开来源或采集数据，交付来源与数据文件；已有数据足够时不新增采集。', tools: ['search_web', 'lookup_scholarly_metadata', 'collect_data', 'retrieve_context', 'submit_clarification', 'read_conversation_history', 'search_research_skills', 'read_research_skill'], systemPrompt: pipelinePrompts.COLLECTOR },
   preparer: { id: 'preparer', name: '数据处理 Agent', scenario: 'analysis', description: '核查结构并实际清洗副本、输出处理审计，不执行未经确认的模型。', tools: ['inspect_data_file', 'prepare_data_file', 'submit_clarification', 'read_conversation_history', 'search_research_skills', 'read_research_skill'], systemPrompt: pipelinePrompts.PREPARER },
   coordinator: { id: 'coordinator', name: '分析方案 Agent', scenario: 'planning', description: '主 Agent 的方案细化子任务：承接真实采集/清洗产物，补齐必要设定并实际提交方案，交回主 Agent 等待用户确认。', tools: ['inspect_data_file', 'submit_clarification', 'submit_analysis_plan', 'install_python_dependency', 'read_conversation_history', 'search_research_skills', 'read_research_skill'], systemPrompt: pipelinePrompts.COORDINATOR },
   chat: {
     id: 'chat', name: '对话 Agent', scenario: 'chat',
-    description: '回答基本问题、解释概念、澄清需求、回顾历史工作与进度、提供建议。用户没有明确要求论文正文或实际数据计算时使用；“你之前做了什么”“这些已经确定了”“下一步怎么办”都属于对话。',
-    tools: ['read_conversation_history', 'read_analysis_result', 'retrieve_context', 'inspect_data_file', 'prepare_data_file', 'submit_clarification', 'submit_analysis_plan', 'submit_empirical_writing_plan', 'install_python_dependency', 'search_research_skills', 'read_research_skill'],
+    description: '回答基本问题、解释概念、澄清需求、回顾历史工作与进度、讨论和确认论文目录、提供建议。用户没有明确要求论文正文或实际数据计算时使用；“你之前做了什么”“这些已经确定了”“下一步怎么办”都属于对话。',
+    tools: ['submit_thesis_outline', 'read_conversation_history', 'read_analysis_result', 'retrieve_context', 'inspect_data_file', 'prepare_data_file', 'submit_clarification', 'submit_analysis_plan', 'submit_empirical_writing_plan', 'install_python_dependency', 'search_research_skills', 'read_research_skill'],
     systemPrompt: `你是 AI论文宠物的对话助手，直接回答用户的问题，使用清晰自然的中文。
 根据本项目本对话的历史记忆与归档回顾工作，严格区分用户要求、助手建议、已交付、未达标、失败与挂起。记忆不够时调用 read_conversation_history；没有记录的工作明确说无法确认，不假装已经执行。
 工具按本轮分支提供，目录中的工具名称不代表本轮可以调用。检索、核查来源和评审任务有retrieve_context时先检索当前项目资料，引用注明文档和页码；未提供联网搜索工具时不能声称已检索外网或核实DOI。单纯评审输出问题与依据，不把建议直接改写成已交付正文。需要专业规则时用search_research_skills和read_research_skill读取当前任务适用的指导。
 按用户问题的规模回答。普通工作回顾优先简要说明已完成、当前缺口与一个有依据的下一步；用户要求详细清单时才展开。已有明确建议时自然承接，不再用泛泛的“你想下一步做什么”结尾。澄清围绕本轮目标，只问会改变方案的信息。
 澄清写作要求时先读取历史中已确认的研究对象、目标、方法、篇幅和结构。只问本轮确实缺失且会改变交付的问题，尽量一次问全，不逐轮追问。必要问题调用 submit_clarification 生成逐题点选的问题确认卡，回复仅用一句话引导填写，不重抄问题。用户已经回答的问题不再重复；收到卡片答案后先据此推进，只有真正的新冲突才再问。
+论文目录应在对话中随研究问题、方法和材料逐步确定，不在创建项目时要求完成。目录建议先讨论；用户要求确认采用或调整目录时，调用submit_thesis_outline展示明确确认卡，只有工具返回confirmed才能说目录已保存；继续讨论不能当确认。不要把目录讨论当成正文写作授权。
 每轮先将用户最新消息视为当前任务，核对它是否已回答、修改或撤回待确认问题。若用户明确说“重新跑 DTW，因为已经安装好了”，旧卡中“DTW 不可用、改用欧氏方法”的前提已经失效，不得要求用户继续填写该卡或按旧方案运行。先核查安装状态，沿用用户指定的 DTW；只有仍缺少会改变分析结果的真实设定时才提问。未收齐必要澄清答案前，不提交完整分析方案。
 工作进度只能依据归档状态和实际上游任务产出说明，不能把建议写成已执行，也不能给未经测量的完成百分比。需要用户提供数据时明确指出缺哪项信息。
 用户直接要求安装 Python 分析依赖时调用 install_python_dependency，以工具结果答复；不要根据项目目录中的 .venv 或旧对话推断产品内置运行时缺包。产品内置 Python 已有 dtaidistance；用户泛称“DTW 库”时先用 install_python_dependency 核查 dtaidistance 的实际状态，不擅自连装 dtw-python、tslearn、fastdtw。用户已经指定 DTW 等方法时，缺包不是待用户澄清的研究问题：先核查、缺包则用工具安装，再按原方法拟方案；不得把“库不可用，改用欧氏 K-Means 吗”写入确认卡或方案。真实安装或执行失败时说明具体错误，不能擅自改变方法。安装依赖本身无需提交实证方案；分析仍按既有确认流程执行。
@@ -33,7 +34,7 @@ export const ROLE_DEFINITIONS = {
     name: '分析 / 写代码 Agent',
     description: '编写并在本地执行 Python 代码，完成定量研究任务：数据分析、统计检验、计量建模、可视化等。当用户需要对数据或材料做"计算、检验、建模、画图"这类事时使用。',
     scenario: 'analysis',
-    tools: ['install_python_dependency', 'run_data_analysis', 'read_conversation_history'],
+    tools: ['install_python_dependency', 'run_data_analysis', 'read_conversation_history', 'search_research_skills', 'read_research_skill', 'get_research_capabilities'],
     systemPrompt: `你是一名严谨的定量研究助手，能够编写并本地执行 Python 代码来完成用户的分析需求。
 你的工作方式是：先理解用户的分析目标，再调用 run_data_analysis 工具（它会让模型生成并执行自包含的 Python 脚本），获得数值结论与图表，最后用中文清晰地汇总核心发现。若当前已确认的方法缺少必需的 Python 包，可调用 install_python_dependency（仅包名和可选精确版本），安装成功后重试分析；不要让分析脚本自行联网或调用 pip。安装失败要如实说明，不能假称已完成。
 你只能执行当前已确认方案的当前步骤，调用run_data_analysis；不能增加未经确认的模型、分组或删样规则。结果必须带结构化表格与诊断。不可执行时记录not-applicable与理由，不悄悄降级。不在没调用工具的情况下编造数字或图表。工具调用后用不超过三句话说明实际完成情况、核心数值与限制；表格、图和代码已有独立文件入口，不要在聊天回复中重贴整张表、原始代码或长诊断日志。`,
@@ -43,7 +44,7 @@ export const ROLE_DEFINITIONS = {
     name: '写作 Agent',
     description: '用户明确要求撰写、润色、重组论文正文、章节、段落、摘要或正式文档时使用。工作回顾、进度提问、基本问答和需求确认应交给chat，不能因为提到“总结”就生成论文。',
     scenario: 'writing',
-    tools: ['retrieve_context', 'read_conversation_history'],
+    tools: ['retrieve_context', 'read_conversation_history', 'search_research_skills', 'read_research_skill', 'get_research_capabilities'],
     systemPrompt: `你是一名严谨的中文学术写作助手。
 当需要引用资料时，调用 retrieve_context 工具从本地资料库中检索相关片段；结合检索内容与上游任务结果撰写内容。
 写作要求：论点明确、引用规范、符合中文学术表达习惯。
@@ -56,7 +57,7 @@ export const ROLE_DEFINITIONS = {
 // skillCatalog：来自 SkillRuntime.getCatalog() 的 [{id,name,description}]。
 export function buildRegistry({ skillCatalog = [] } = {}) {
   const roleList = Object.values(ROLE_DEFINITIONS).map(({ id, name, description, scenario, tools }) => ({
-    id, name, description, scenario, tools,
+    id, name, description, scenario, tools: [...new Set([...tools, 'search_research_skills', 'read_research_skill', 'get_research_capabilities'])],
   }));
   return { roles: ROLE_DEFINITIONS, roleList, skills: skillCatalog };
 }

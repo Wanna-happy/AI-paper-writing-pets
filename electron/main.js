@@ -37,7 +37,7 @@ const { assertTrustedSender, secureWindow } = require('./app-security');
 const { getSandboxStatus } = require('./sandbox/windows-sandbox');
 const {
   buildAssembledThesis,
-  isLongThesis,
+  buildChapterPlan,
 } = require('./thesis-controller');
 
 function formatProjectDomains(project) {
@@ -328,8 +328,9 @@ function openWorkspace() {
 
   const display = screen.getDisplayMatching(mainWindow?.getBounds() || getPetWindowBounds());
   const { workArea } = display;
-  const width = Math.min(WORKSPACE_WINDOW.width, workArea.width);
-  const height = Math.min(WORKSPACE_WINDOW.height, workArea.height);
+  const savedWorkspaceBounds=loadSettings().workspaceBounds;
+  const width = Math.min(Math.max(820,Number(savedWorkspaceBounds?.width)||WORKSPACE_WINDOW.width), workArea.width);
+  const height = Math.min(Math.max(600,Number(savedWorkspaceBounds?.height)||WORKSPACE_WINDOW.height), workArea.height);
 
   workspaceWindow = new BrowserWindow({
     x: workArea.x + Math.round((workArea.width - width) / 2),
@@ -352,6 +353,9 @@ function openWorkspace() {
     },
   });
   secureWindow(workspaceWindow, path.join(__dirname, '..'));
+  const persistWorkspaceBounds=()=>{if(workspaceWindow&&!workspaceWindow.isDestroyed()&&!workspaceWindow.isMaximized()&&!workspaceWindow.isMinimized())saveSettings({workspaceBounds:workspaceWindow.getNormalBounds()});};
+  workspaceWindow.on('resized',persistWorkspaceBounds);
+  workspaceWindow.on('moved',persistWorkspaceBounds);
   workspaceWindow.loadFile(path.join(__dirname, '../src/feed.html'));
   workspaceWindow.once('ready-to-show', () => workspaceWindow?.show());
   workspaceWindow.webContents.once('did-finish-load', () => workspaceWindow?.show());
@@ -544,7 +548,22 @@ onApp('set-pet-reaction', (_event, payload) => {
 });
 handleApp('open-workspace', () => openWorkspace());
 handleApp('show-pet-mode', () => showPetMode());
+handleApp('workspace-window-control', (_event, action) => {
+  if (!workspaceWindow || workspaceWindow.isDestroyed()) return { maximized: false };
+  if (action === 'minimize') workspaceWindow.minimize();
+  else if (action === 'toggle-maximize') { if (workspaceWindow.isMaximized()) workspaceWindow.unmaximize(); else workspaceWindow.maximize(); }
+  else if (action !== 'state') throw new Error('不支持的窗口操作');
+  return { maximized: workspaceWindow.isMaximized() };
+});
 handleApp('hide-pet', () => hidePetWindow());
+handleApp('formatting-requirements-import',async()=>{
+  const chosen=await dialog.showOpenDialog(workspaceWindow||mainWindow,{title:'选择论文格式要求',properties:['openFile'],filters:[{name:'格式要求文档',extensions:['docx','pdf','txt','md']}]});
+  if(chosen.canceled||!chosen.filePaths[0])return {canceled:true};
+  const file=chosen.filePaths[0];if(!['.docx','.pdf','.txt','.md'].includes(path.extname(file).toLowerCase())||fs.statSync(file).size>10*1024*1024)throw new Error('请选择 10 MB 以内的 DOCX、PDF、TXT 或 Markdown 格式要求。');
+  const parsed=await require('./document-parser').parseDocument(file);
+  if(parsed.status!=='parsed')throw new Error('无法提取格式要求文字。扫描 PDF 请先转为文字版，或直接填写排版参数。');
+  return {canceled:false,name:path.basename(file),...require('./document-formatting').parseFormattingRequirements(parsed.text)};
+});
 handleApp('choose-document-files', async () => {
   const result = await dialog.showOpenDialog(workspaceWindow || mainWindow, {
     title: '选择要投喂的论文资料',
@@ -560,7 +579,7 @@ handleApp('choose-document-files', async () => {
   return result.filePaths;
 });
 
-handleApp('choose-conversation-files', async (_event, projectId, folder = false) => {
+handleApp('choose-conversation-files', async (_event, projectId, folder = false, conversationId) => {
   const result = await dialog.showOpenDialog(workspaceWindow || mainWindow, {
     title: folder ? '添加文件夹到当前项目' : '添加文件到当前项目',
     properties: folder ? ['openDirectory', 'multiSelections'] : ['openFile', 'multiSelections'],
@@ -570,9 +589,9 @@ handleApp('choose-conversation-files', async (_event, projectId, folder = false)
     ],
   });
   if (result.canceled) return [];
-  return require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths: result.filePaths });
+  return require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths: result.filePaths, conversationId });
 });
-handleApp('conversation-files-import', (_event, projectId, paths) => require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths }));
+handleApp('conversation-files-import', (_event, projectId, paths, conversationId) => require('./project-files').importProjectFiles({ store: workspaceStore, ragStore, projectId, paths, conversationId }));
 handleApp('uploaded-file-preview', (_event, projectId, conversationId, id, page = 1, sheet = 0) => require('./upload-preview').previewUpload({ store: workspaceStore, projectId, conversationId, id, page, sheet }));
 handleApp('file-bytes-preview', (_event, payload) => require('./upload-preview').previewEncodedBytes(payload));
 handleApp('file-bytes-search',(_event,payload)=>require('./upload-preview').searchEncodedDocument(payload));
@@ -625,8 +644,17 @@ handleApp('rag-rebuild', async (_event, projectId) => {
   sendPetReaction('jumping', '知识库已经准备好啦！');
   return ragStore.getStatus(project);
 });
-handleApp('draft-save', (_event, projectId, draft) => workspaceStore.saveDraft(projectId, draft));
+handleApp('draft-save', (_event, projectId, draft) => workspaceStore.saveDraft(projectId, {...draft,changeOrigin:'user'}));
+handleApp('turn-changes-review',(_event,projectId,conversationId,runId)=>require('./turn-changes').review(workspaceStore,projectId,conversationId,runId));
+handleApp('turn-changes-undo',(_event,projectId,conversationId,runId)=>require('./turn-changes').undo(workspaceStore,projectId,conversationId,runId));
 handleApp('thesis-preview-assembled',(_event,projectId)=>{const project=workspaceStore.loadWorkspace().projects.find(p=>p.id===projectId);if(!project)throw new Error('项目不存在');return require('./thesis-controller').buildAssembledThesis(project);});
+handleApp('project-research-blueprint',(_event,input)=>({chapters:buildChapterPlan(input||{}),preflight:require('./research-design').methodPreflight(input||{})}));
+handleApp('draft-assign-chapter',(_event,projectId,draftId,chapterId)=>workspaceStore.assignDraftChapter(projectId,draftId,chapterId));
+handleApp('project-outline-extract',(_event,projectId,documentId)=>{
+  const project=workspaceStore.loadWorkspace().projects.find(p=>p.id===projectId),document=project?.documents.find(d=>d.id===documentId);
+  if(!document||document.status!=='parsed')throw new Error('请先上传并解析当前项目的目录或模板文件');
+  return require('./outline-import').extractOutline(document.text,require('./thesis-controller').ensureThesisControl(project).chapters);
+});
 handleApp('document-metadata-update',(_event,projectId,documentId,partial)=>workspaceStore.updateDocumentMetadata(projectId,documentId,partial));
 handleApp('project-backup',async(_event,projectId)=>{
   const project=workspaceStore.loadWorkspace().projects.find(p=>p.id===projectId);if(!project)throw new Error('项目不存在');
@@ -714,12 +742,12 @@ handleApp('draft-apply-skill', async (_event, projectId, { draftId, selectedText
   const text = String(selectedText || '').trim();
   if (!text) throw new Error('未选中内容，请先在草稿里选中一段文字。');
   if (text.length > 20000 || String(selectedHtml || '').length > 30000) throw new Error('选区过大，请分段改写。');
-  if (!['polish', 'expand', 'empirical'].includes(operation)) throw new Error('未知的局部操作。');
+  if (!['polish', 'expand', 'empirical', 'compress', 'translate', 'restructure'].includes(operation)) throw new Error('未知的局部操作。');
   const skillRuntime = new SkillRuntime(path.join(__dirname, '../assets/research-skills'));
   const modelLayer = await import('./pi/model-layer.mjs');
   const settings = loadSettings(), layer = modelLayer.createModelLayer(settings);
   layer.getApiKey = scenario => resolveAgentKey(workspaceStore, settings, scenario);
-  return applyLocalEdit({ skillRuntime, requestModel: args => modelLayer.requestModel(layer, args), project, draft, selectedText: text, selectedHtml, operation });
+  return applyLocalEdit({ skillRuntime, requestModel: args => modelLayer.requestModel(layer, args), project, draft, selectedText: text, selectedHtml, operation, settings });
 });
 
 handleApp('api-test', async (_event, config, apiKey) => {
@@ -887,8 +915,8 @@ handleApp('thesis-export-assembled', async (_event, projectId) => {
   const state = workspaceStore.loadWorkspace();
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) throw new Error('项目不存在');
-  if (!isLongThesis(project)) throw new Error('仅 4 万字及以上的硕士论文项目支持全文组装导出');
   const draft = buildAssembledThesis(project);
+  if(!draft.content.trim())throw new Error('尚无可组装的正文；请先完成正文并指定章节归属');
   const result = await dialog.showSaveDialog(workspaceWindow || mainWindow, {
     title: '导出组装论文 Word 文档',
     defaultPath: `${project.title.replace(/[\\/:*?"<>|]/g, '_')}-组装草稿.docx`,

@@ -1,7 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { CORE_SKILL_ID, PLANNING_SKILL_ID, ANALYSIS_SKILL_ID, LEGACY_IDS, PRODUCT_CONTRACT } = require('./research-adapter');
-const SKILL_RUNTIME_VERSION = 3;
+const { cards, matchingCards, applicableExternal } = require('./product-guidance');
+const SKILL_RUNTIME_VERSION = 4;
 function skillBody(s) { return String(s || '').replace(/^---[\s\S]*?---\s*/, '').trim(); }
 function extractMarkdownSection(source, heading) {
   if (!heading) return String(source || '').trim();
@@ -55,9 +57,7 @@ const ROUTES = [
   [/系统综述|PRISMA/i, '52-keemanxp-slr-prisma::slr-prisma'],
   [/访谈|主题分析|定性编码/i, '53-keemanxp-thematic-analysis-skill::thematic-analysis'],
   [/文献综述|研究现状|研究缺口/i, LEGACY_IDS['literature-review']],
-  [/引言|绪论/i, LEGACY_IDS['introduction-writing']],
   [/理论基础|理论框架|假设推导/i, LEGACY_IDS['theoretical-foundation']],
-  [/选题|开题|摘要|关键词/i, LEGACY_IDS['thesis-planning']],
   [/稳健性|敏感性|异质性/i, LEGACY_IDS['empirical-inference']],
   [/工具变量|2SLS/i, '67-econfin-workflow-toolkit::iv-estimation'],
   [/DID|双重差分/i, '67-econfin-workflow-toolkit::did-analysis'],
@@ -65,10 +65,14 @@ const ROUTES = [
   [/断点|RDD/i, '67-econfin-workflow-toolkit::rdd-analysis'],
   [/合成控制/i, '67-econfin-workflow-toolkit::synthetic-control'],
   [/描述统计|相关分析/i, LEGACY_IDS['data-analysis']],
-  [/数据分析|回归|DTW|聚类|问卷|预测/i, LEGACY_IDS['empirical-linear-models']],
+  [/数据分析|回归|DTW|聚类|预测/i, LEGACY_IDS['empirical-linear-models']],
   [/可视化|图表|绘图|热力图/i, LEGACY_IDS['data-visualization']],
   [/润色|修订|改写|降重/i, LEGACY_IDS.revision],
-  [/引用核验|参考文献核验/i, '67-econfin-workflow-toolkit::reference-verify'],
+  [/(?:核验|核对|验证).*(?:引用|参考文献|DOI)|(?:引用|参考文献|DOI).*(?:核验|核对|验证)/i, '67-econfin-workflow-toolkit::reference-verify'],
+  [/扎根理论/i, '43-wentorai-research-plugins::grounded-theory-guide'],
+  [/案例研究/i, '43-wentorai-research-plugins::qualitative-research-guide'],
+  [/问卷|量表设计/i, '43-wentorai-research-plugins::questionnaire-design-guide'],
+  [/Meta.?分析|荟萃|合并效应量|meta-analysis/i, '43-wentorai-research-plugins::meta-analysis-guide'],
   [/投稿|审稿|回复信/i, LEGACY_IDS['journal-submission']],
   [/研究设计|研究方法/i, LEGACY_IDS['research-design']],
   [/结果解释|实证正文|回归解释/i, LEGACY_IDS['empirical-writing']],
@@ -112,6 +116,7 @@ class SkillRuntime {
       if (this.skills.has(id)) throw new Error(`重复技能标识：${id}`);
       this.skills.set(id, { ...entry, id, filePath, references: [], disabledReason });
     }
+    for (const card of cards) this.skills.set(card.id, card);
   }
   resolveId(id) { return this.skills.has(id) ? id : LEGACY_IDS[id] || id; }
   isBlockedFile(file) {
@@ -121,35 +126,42 @@ class SkillRuntime {
   getCatalog(options) {
     let skills = [...this.skills.values()].filter(s => !s.disabledReason);
     if (options) {
-      const { project = {}, task = '', limit = 24 } = options, query = terms(task);
+      const { project = {}, task = '', role = '', limit: requestedLimit = 24 } = options, query = terms(task);
+      const limit = Math.max(0, Math.min(48, Math.floor(Number(requestedLimit) || 0)));
       const domains = Array.isArray(project.domains) ? project.domains : [project.domain || ''];
-      const context = terms([...domains, ...domains.map(domain => DOMAIN_HINTS[domain] || ''), project.title, project.goal].join(' '));
-      const preferred = new Set([...this.fallbackSkillIds(task, project), PLANNING_SKILL_ID, ANALYSIS_SKILL_ID]);
+      const context = terms([...domains, ...domains.map(domain => DOMAIN_HINTS[domain] || ''), project.title, project.goal].join(' ')).slice(0, 80);
+      const preferred = new Set(this.fallbackSkillIds(task, project, role));
+      skills = skills.filter(skill => applicableExternal(skill.id, task, project) &&
+        (!skill.product || !role || skill.roles.includes(role)) &&
+        (!['duplicate', 'out-of-domain'].includes(skill.tier) || preferred.has(skill.id) || query.some(t => skill.name.toLowerCase().includes(t))));
       skills = skills.map(skill => {
         const text = `${skill.name} ${skill.description} ${JSON.stringify(skill.tags || {})}`.toLowerCase();
         return { skill, score: (preferred.has(skill.id) ? 40 : 0) + query.reduce((n, t) => n + (text.includes(t) ? 3 : 0), 0)
-          + context.reduce((n, t) => n + (text.includes(t) ? .25 : 0), 0) + (skill.tier === 'core' ? 1 : 0) };
+          + Math.min(12, context.reduce((n, t) => n + (text.includes(t) ? 2 : 0), 0)) + (skill.product && preferred.has(skill.id) ? 30 : 0) + (skill.tier === 'core' ? 1 : 0) };
       }).sort((a, b) => b.score - a.score || a.skill.id.localeCompare(b.skill.id)).slice(0, limit).map(x => x.skill);
       const planning = this.skills.get(PLANNING_SKILL_ID);
       if (planning && !skills.some(skill => skill.id === planning.id) && limit > 0) skills.splice(Math.max(0, skills.length - 1), 1, planning);
     }
-    return skills.map(({ id, name, description, tags, license, commercial_use }) => ({ id, name,
-      description: options ? description.slice(0, 1000) : description, tags, license, commercial_use }));
+    return skills.map(({ id, name, description, tags, license, commercial_use, source_url, product, roles, version }) => ({ id, name,
+      description: options ? description.slice(0, 1000) : description, tags, license, commercial_use, source_url,
+      sourceReviewRequired: commercial_use === 'unknown' || /unknown|mixed/i.test(license || ''), ...(product ? { product, roles, version } : {}) }));
   }
   fallbackSkillIds(task, project = {}, role = '') {
     if (!this.external) return [...this.skills.keys()].slice(0, 4);
+    const matched = matchingCards(task, role).map(c => c.id);
     const defaults = role === 'coordinator' ? [PLANNING_SKILL_ID] : ['analyst', 'preparer'].includes(role) ? [ANALYSIS_SKILL_ID] : role === 'collector' ? [] : [CORE_SKILL_ID];
-    return [...new Set([...defaults, ...ROUTES.filter(([rx]) => rx.test(String(task))).map(([, id]) => id)])]
-      .filter(id => this.skills.has(id) && !this.skills.get(id).disabledReason).slice(0, 4);
+    return [...new Set([...matched.slice(0, 2), ...ROUTES.filter(([rx]) => rx.test(String(task))).map(([, id]) => id), ...defaults])]
+      .filter(id => this.skills.has(id) && !this.skills.get(id).disabledReason && applicableExternal(id, task, project)).slice(0, 4);
   }
   readDocument(id, relative = '', offset = 0, limit = 12000) {
     const skill = this.skills.get(this.resolveId(id));
     if (!skill || skill.disabledReason) throw new Error('技能不存在或未启用');
+    if (skill.product && relative) throw new Error('产品指导卡不支持访问外部引用路径');
     const file = relative ? this.safePath(relative, path.dirname(skill.filePath)) : skill.filePath;
-    if (!file || this.isBlockedFile(file) || !fs.existsSync(file) || !fs.statSync(file).isFile() || !/\.(md|txt|json|py|sh|r|do|tex|yaml|yml|toml)$/i.test(file)) throw new Error('只能读取技能库内已启用的文本文件');
-    const source = fs.readFileSync(file, 'utf8'), start = Math.max(0, Math.floor(Number(offset) || 0));
+    if (!file || this.isBlockedFile(file) || !fs.existsSync(file) || !fs.statSync(file).isFile() || (!skill.product && !/\.(md|txt|json|py|sh|r|do|tex|yaml|yml|toml)$/i.test(file))) throw new Error('只能读取技能库内已启用的文本文件');
+    const source = skill.source || fs.readFileSync(file, 'utf8'), start = Math.max(0, Math.floor(Number(offset) || 0));
     const size = Math.min(20000, Math.max(1, Math.floor(Number(limit) || 12000)));
-    return { id: skill.id, path: path.relative(this.rootPath, file), totalCharacters: source.length,
+    return { id: skill.id, path: skill.product ? skill.id : path.relative(this.rootPath, file), contentHash: createHash('sha256').update(source).digest('hex'), totalCharacters: source.length,
       offset: start, nextOffset: start + size < source.length ? start + size : null, text: source.slice(start, start + size) };
   }
   readReference(skill, definition) {
@@ -160,19 +172,30 @@ class SkillRuntime {
     const source = extractMarkdownSection(fs.readFileSync(file, 'utf8'), def.section);
     return source ? { key: `${file}#${def.section || ''}`, label: def.label || path.basename(file), source: source.slice(0, def.maxCharacters || 12000) } : null;
   }
-  composePrompt(project, task, skillIds = this.fallbackSkillIds(task, project), maxCharacters = 28000) {
-    const selected = [...new Set(skillIds.map(id => this.resolveId(id)))].map(id => this.skills.get(id)).filter(s => s && !s.disabledReason).slice(0, 4);
+  composePrompt(project, task, skillIds = this.fallbackSkillIds(task, project), maxCharacters = 28000, options = {}) {
+    const adaptive = this.external ? matchingCards(task, options.role).map(c => c.id).slice(0, 2) : [];
+    const selected = [...new Set([...adaptive, ...skillIds.map(id => this.resolveId(id))])].map(id => this.skills.get(id)).filter(s => s && !s.disabledReason && (!s.product || !options.role || s.roles.includes(options.role)) && applicableExternal(s.id, task, project)).slice(0, 4);
     const budget = Math.max(0, maxCharacters - (this.external ? PRODUCT_CONTRACT.length * 2 + 1000 : 0));
+    const fragments = [];
     const sections = selected.map(skill => {
       const source = skill.source || fs.readFileSync(skill.filePath, 'utf8'), body = skillBody(source);
       const size = Math.floor(budget / (selected.length || 1));
-      let section = `## Skill：${skill.name}\nID：${skill.id}\n${body.slice(0, size)}`;
+      // Long upstream manuals are task-indexed instead of always injecting their first pages.
+      let excerpt = body.slice(0, size);
+      if (body.length > size && !skill.product) {
+        const chunks = body.split(/(?=^#{1,4}\s)/m), query = terms(task);
+        const ranked = chunks.map((text, index) => ({ text, index, score: query.reduce((n,t)=>n+(text.slice(0,500).toLowerCase().includes(t)?1:0),0) }))
+          .filter(c=>c.score>0).sort((a,b)=>b.score-a.score||a.index-b.index);
+        if (ranked.length) excerpt = ranked.slice(0,3).sort((a,b)=>a.index-b.index).map(c=>c.text).join('\n').slice(0,size);
+      }
+      fragments.push({ id:skill.id, contentHash:createHash('sha256').update(source).digest('hex'), excerptHash:createHash('sha256').update(excerpt).digest('hex'), excerptCharacters:excerpt.length, totalCharacters:body.length, headings:excerpt.match(/^#{1,4}\s.+$/gm)||[] });
+      let section = `## Skill：${skill.name}\nID：${skill.id}；版本：${skill.version || SKILL_RUNTIME_VERSION}\n${excerpt}`;
       if (body.length > size) section += '\n[已按预算节选；请用read_research_skill分页读取后续内容及引用。]';
       if (!this.external) for (const def of skill.references || []) { const read = this.readReference(skill, def); if (read) section += '\n' + read.source; }
       return section;
     });
     const body = sections.join('\n\n');
-    return { skill: { ids: selected.map(s => s.id), names: selected.map(s => s.name), version: SKILL_RUNTIME_VERSION },
+    return { skill: { ids: selected.map(s => s.id), names: selected.map(s => s.name), version: SKILL_RUNTIME_VERSION, fragments },
       prompt: this.external ? `\n\n${PRODUCT_CONTRACT}\n\n# 本轮外部研究技能\n${body}\n\n${PRODUCT_CONTRACT}`
         : body ? `\n\n# 本轮专用 Skill\n${body.slice(0, maxCharacters)}` : '' };
   }

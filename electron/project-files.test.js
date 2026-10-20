@@ -33,6 +33,12 @@ Module._load = function(id, ...args) { return id === 'electron' ? { app: { getPa
   const repeated = await api.importProjectFiles({ store, ragStore, projectId: projects[0].id, paths: [folder] });
   assert.equal(projects[0].projectFiles.length, 2);
   assert.equal(repeated.attachments.length, 2);
+  projects[0].conversations=[{id:'first-chat'},{id:'second-chat'}];
+  const fromChat=await api.importProjectFiles({store,ragStore,projectId:projects[0].id,paths:[folder],conversationId:'first-chat'});
+  assert(fromChat.attachments.every(file=>file.sourceConversationIds.includes('first-chat')));
+  const reusedChat=await api.importProjectFiles({store,ragStore,projectId:projects[0].id,paths:[folder],conversationId:'second-chat'});
+  assert(reusedChat.attachments.every(file=>file.sourceConversationIds.includes('first-chat')&&file.sourceConversationIds.includes('second-chat')));
+  await assert.rejects(()=>api.importProjectFiles({store,ragStore,projectId:projects[1].id,paths:[folder],conversationId:'first-chat'}),/对话不属于当前项目/);
   fs.rmSync(folder, { recursive: true });
   delete require.cache[require.resolve('./conversation-files')];
   assert.equal(api.availableProjectFiles(store, projects[0]).length, 2);

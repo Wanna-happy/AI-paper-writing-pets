@@ -1,0 +1,57 @@
+const assert=require('node:assert/strict');
+const {buildResearchWorkflow}=require('./research-workflow');
+const tc=require('./thesis-controller');
+const {methodPreflight}=require('./research-design');
+const base={id:'p',type:'硕士学位论文',title:'管理学论文',domains:['管理学'],activeConversationId:'c',documents:[],drafts:[],thesisProfile:{targetWords:20000}};
+assert.equal(buildResearchWorkflow(base,'撰写绪论').writingModeId,'management-general');
+const caseProject={...base,thesisProfile:{...base.thesisProfile,researchType:'case',methodology:'比较案例研究'}};
+const surveyProject={...base,thesisProfile:{...base.thesisProfile,researchType:'survey',methodology:'问卷与线性回归'}};
+assert.equal(buildResearchWorkflow(caseProject,'撰写案例研究发现').writingModeId,'management-case');
+assert.equal(buildResearchWorkflow(caseProject,'撰写案例研究发现').sectionId,'results');
+assert.equal(buildResearchWorkflow(surveyProject,'撰写问卷回归结果').writingModeId,'management-survey');
+assert.equal(buildResearchWorkflow(surveyProject,'撰写问卷回归结果').sectionId,'results');
+assert.equal(buildResearchWorkflow({...base,thesisProfile:{methodology:'面板固定效应回归'}},'撰写实证结果').writingModeId,'economics-quant');
+const sem={...surveyProject,thesisProfile:{...surveyProject.thesisProfile,methodology:'问卷 SEM CFA'}};
+assert(methodPreflight(sem).blockers.some(x=>x.includes('尚未接入')));
+assert(tc.missingRequirements(sem).some(x=>x.includes('CSV/XLSX')));
+assert.equal(methodPreflight(caseProject).blockers.length,0);
+assert.equal(methodPreflight(surveyProject).blockers.length,0);
+assert.equal(methodPreflight({...surveyProject,thesisProfile:{methodology:'问卷不使用SEM，只用OLS'}}).blockers.length,0);
+const outline=[{id:'context',title:'案例背景',sectionIds:['method'],targetWords:10000},{id:'finding',title:'案例发现',sectionIds:['results'],targetWords:10000}];
+const project={...caseProject,thesisProfile:{...caseProject.thesisProfile,outline,outlineConfirmed:true}};
+assert.deepEqual(tc.ensureThesisControl(project).chapters.map(c=>c.id),['context','finding']);
+const unit=tc.createThesisUnit(project,buildResearchWorkflow(project,'撰写案例研究发现'),'撰写案例研究发现');
+assert.equal(unit.chapterId,'finding');
+const make=(id,content,chapter,unitId=id)=>({id,mode:'api',conversationId:'c',title:id,content,updatedAt:'2026-10-20T10:00:00Z',thesisUnit:{id:unitId,chapterId:chapter,sequence:1},evidence:[{evidenceId:'E1',documentName:id,page:1}],mappings:['E1来源'],citations:[id]});
+const notes='<p>判断<sup data-footnote="1">1</sup>，见表 1。</p><p class="table-title">表 1 数据</p><table><tr><td>2</td></tr></table><p data-footnote="1"><sup>1</sup>来源</p>';
+const a=make('a',notes,'context'),b=make('b',notes,'finding');
+const current={...project,drafts:[a,b],thesisControl:tc.updateThesisProgress({...project,drafts:[a,b]},b)};
+const nextWorkflow=buildResearchWorkflow(current,'继续这一节');
+assert.equal(nextWorkflow.chapterId,'finding');assert.equal(nextWorkflow.sectionId,'results');
+assert.equal(tc.createThesisUnit(current,nextWorkflow,'继续这一节').sequence,2);
+assert.equal(tc.createThesisUnit(current,nextWorkflow,'修改本节').id,'b');
+const reordered={...current,thesisProfile:{...project.thesisProfile,outline:[{...outline[1],title:'新的发现标题'},outline[0]]}};
+assert.deepEqual(tc.ensureThesisControl(reordered).chapters.map(c=>c.id),['finding','context']);
+const assembled=tc.buildAssembledThesis(reordered);
+assert.deepEqual(assembled.assembly.draftIds,['b','a']);
+assert.equal(assembled.assembly.footnoteCount,2);assert.equal(assembled.assembly.tableCount,2);
+assert(assembled.content.includes('data-footnote="2">2</sup>'));assert(assembled.content.includes('表 2 数据'));
+assert.equal(assembled.evidence.length,2);assert.equal(assembled.mappings.length,2);
+assert.equal(assembled.deliveryStatus,'needs-review');
+const newer={...b,id:'b-new',updatedAt:'2026-10-20T11:00:00Z',content:'<p>新版本内容。</p>'};
+assert.deepEqual(tc.buildAssembledThesis({...current,drafts:[a,b,newer]}).assembly.draftIds,['a','b-new']);
+assert(tc.buildAssembledThesis({...current,drafts:[a,b],thesisProfile:{...project.thesisProfile,outline:[outline[0]]}}).checks.some(x=>x.includes('移出目录')));
+assert.throws(()=>tc.normalizeThesisProfile({outline:[outline[0],outline[0]],outlineConfirmed:true}),/重复/);
+for(const type of ['课程论文','硕士学位论文','博士学位论文','期刊论文','研究报告']) {
+ const p={...current,type};assert(tc.supportsAssembly(p));assert(tc.buildAssembledThesis(p).content);
+}
+const full=make('full','<h1>绪论</h1><p>已有完整初稿。</p>','whole-document');
+assert(tc.buildAssembledThesis({...base,type:'课程论文',drafts:[full]}).content.includes('已有完整初稿'));
+console.log('management case/survey/SEM preflight, chapter continuation/revision, stable reordered outline, multi-type assembly and citation renumbering passed');
+
+const preferenceContext=require('./agent/context-policy').projectSettingsContext({language:'英文',citationStyle:'APA'},{defaultLanguage:'中文',defaultCitation:'GB/T 7714'});
+assert(preferenceContext.includes('"language":"中文"'));assert(preferenceContext.includes('"citationStyle":"GB/T 7714"'));
+
+const imported=require('./outline-import').extractOutline('第一章 绪论……1\n第二章 研究设计......8\n参考文献',[{id:'kept-intro',title:'第一章 绪论',targetWords:1200}]);
+assert.equal(imported[0].id,'kept-intro');assert.equal(imported[0].targetWords,1200);assert.equal(imported[2].sectionIds[0],'references');
+assert.throws(()=>require('./outline-import').extractOutline('没有目录正文'),/未识别/);

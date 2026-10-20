@@ -34,20 +34,46 @@ function normalizeViewpoints(value) {
 
 function normalizeThesisProfile(value = {}) {
   const targetWords = Number(value.targetWords) || 50000;
+  const outline=normalizeOutline(value.outline);
+  if(value.outlineConfirmed===true&&!outline.length)throw new Error('请先添加章节，再确认论文目录');
   return {
-    targetWords: Math.max(1000, targetWords),
+    targetWords: Math.min(1000000,Math.max(1000, Number.isFinite(targetWords)?targetWords:50000)),
     researchQuestion: text(value.researchQuestion),
     viewpoints: normalizeViewpoints(value.viewpoints),
     methodology: text(value.methodology),
+    researchType: require('./research-design').TYPES[value.researchType] ? value.researchType : '',
+    outline,
+    outlineConfirmed: value.outlineConfirmed === true,
     dataMaterials: text(value.dataMaterials),
     analysisGoal: text(value.analysisGoal),
     schoolOrJournal: text(value.schoolOrJournal),
   };
 }
 
+const SECTIONS = ['introduction','literature-review','theory','method','results','discussion','conclusion','abstract','references','general'];
+function normalizeOutline(value) {
+  if (!Array.isArray(value)) return [];
+  if (value.length > 40) throw new Error('目录最多支持40章，请按章节组织小节');
+  const seen = new Set();
+  return value.map((chapter,index) => {
+    const id = text(chapter.id) || `outline-${index+1}`;
+    if (!/^[\w-]{1,80}$/.test(id) || seen.has(id)) throw new Error('章节标识无效或重复，请重新编辑目录');
+    seen.add(id);
+    const title=text(chapter.title).slice(0,120);
+    if(!title) throw new Error('目录中的章节标题不能为空');
+    return { id, title, targetWords: Math.min(1000000,Math.max(0,Number(chapter.targetWords)||0)), purpose:text(chapter.purpose).slice(0,1000),
+      sectionIds:[...new Set((chapter.sectionIds||[]).filter(s=>SECTIONS.includes(s)))],
+      status:'planned',generatedWords:0 };
+  });
+}
+
+function supportsAssembly(project) { return !!project; }
+function defaultTargetWords(type) { return ({'课程论文':6000,'开题报告':6000,'期刊论文':10000,'研究报告':12000,'博士学位论文':80000})[type]||50000; }
+function plainWords(content) { return text(content).replace(/<[^>]*>/g,' ').replace(/&(?:nbsp|amp|lt|gt|quot|#\d+);/g,' ').replace(/\s/g,'').length; }
+
 function isLongThesis(project) {
   const profile = normalizeThesisProfile(project?.thesisProfile);
-  return project?.type === '硕士学位论文' && profile.targetWords >= LONG_THESIS_WORDS;
+  return !!project?.type && profile.targetWords >= LONG_THESIS_WORDS;
 }
 
 function missingRequirements(project) {
@@ -60,17 +86,20 @@ function missingRequirements(project) {
   if (!profile.schoolOrJournal) missing.push('学校/学院模板、导师要求或目标期刊规范');
   const documents = project?.documents || [];
   if (!documents.some((document) => document.status === 'parsed' && text(document.text))) missing.push('至少一份已成功解析、可供引用的核心文献或研究材料');
-  if (/定量|计量|回归|面板|问卷|实验|数据分析/i.test(profile.methodology)
+  if (['survey','quantitative','mixed'].includes(require('./research-design').researchDesign(project).id)
     && !documents.some((document) => ['.csv', '.xlsx'].includes(document.extension))) {
     missing.push('实际数据文件（CSV/XLSX）及对应数据字典');
   }
+  missing.push(...require('./research-design').methodPreflight(project).blockers);
   return missing;
 }
 
 function buildChapterPlan(project) {
   const profile = normalizeThesisProfile(project?.thesisProfile);
+  if (profile.outlineConfirmed && profile.outline.length) return profile.outline;
   const ratio = profile.targetWords / 50000;
-  return DEFAULT_CHAPTERS.map(([title, baselineWords, purpose], index) => ({
+  const design=require('./research-design').researchDesign(project);
+  const plan=DEFAULT_CHAPTERS.map(([title, baselineWords, purpose], index) => ({
     id: `chapter-${index + 1}`,
     title,
     targetWords: Math.round((baselineWords * ratio) / 100) * 100,
@@ -86,16 +115,34 @@ function buildChapterPlan(project) {
           ? '真实分析结果、图表、访谈/案例证据或待验证结果'
           : '与本章主张直接相关的文献或用户提供材料',
   }));
+  if(design.id==='case'){plan[3].title='第四章 研究设计与案例背景';plan[4].title='第五章 案例分析与研究发现';}
+  if(design.id==='survey'){plan[3].title='第四章 问卷设计与数据来源';plan[4].title='第五章 统计分析与研究结果';}
+  if(project?.type==='开题报告')return plan.slice(0,4).concat({id:'chapter-plan',title:'研究计划与进度安排',targetWords:1000,purpose:'计划而非已完成结果',sectionIds:['general'],status:'planned',generatedWords:0});
+  return plan;
 }
 
-function resolveThesisChapter(project, draftOrWorkflow = {}) {
+function resolveThesisChapter(project, draftOrWorkflow = {}, { task='', conversationId=project?.activeConversationId } = {}) {
   const control = ensureThesisControl(project);
   const workflow = draftOrWorkflow.workflow || draftOrWorkflow;
   const sectionId = text(workflow.sectionId);
   const section = text(workflow.section);
-  return control.chapters.find((item) => item.sectionIds?.includes(sectionId))
-    || control.chapters.find((item) => section && item.title.includes(section))
-    || null;
+  const explicitId=draftOrWorkflow.thesisUnit?.chapterId || workflow.chapterId;
+  if(explicitId)return control.chapters.find(c=>c.id===explicitId)||null;
+  const chapterNumber=value=>{const raw=String(value).match(/第([一二三四五六七八九十百\d]+)章/)?.[1];if(!raw)return null;if(/^\d+$/.test(raw))return Number(raw);const digits='零一二三四五六七八九';if(raw.includes('十')){const [a,b]=raw.split('十');return (a?digits.indexOf(a):1)*10+(b?digits.indexOf(b):0);}return digits.indexOf(raw);};
+  const requestedNumber=chapterNumber(task);
+  const named=control.chapters.filter(c=>task.includes(c.title)||section&&c.title===section||requestedNumber!==null&&chapterNumber(c.title)===requestedNumber);
+  if(named.length===1)return named[0];
+  if(sectionId&&sectionId!=='general') {
+    const matches=control.chapters.filter(c=>c.sectionIds?.includes(sectionId));
+    if(matches.length===1)return matches[0];
+  }
+  if(/继续|这一节|这节|本节|上一节|该节|修改|润色|重写/.test(task)) {
+    const active=control.activeUnits?.[conversationId];
+    const recent=(project.drafts||[]).find(d=>d.mode==='api'&&(!conversationId||d.conversationId===conversationId)&&d.thesisUnit?.chapterId);
+    const id=active?.chapterId||recent?.thesisUnit?.chapterId;
+    return control.chapters.find(c=>c.id===id)||null;
+  }
+  return null;
 }
 
 function normalizeUnitKey(value) {
@@ -106,10 +153,11 @@ function normalizeUnitKey(value) {
     .slice(0, 100);
 }
 
-function createThesisUnit(project, workflow, task) {
-  const chapter = resolveThesisChapter(project, workflow);
+function createThesisUnit(project, workflow, task, { conversationId=project?.activeConversationId } = {}) {
+  const chapter = resolveThesisChapter(project, workflow, { task, conversationId });
+  if(workflow.sectionId==='paper'&&!chapter)return {id:`whole-${conversationId||'project'}`,chapterId:'whole-document',chapterTitle:'全文',title:text(task).slice(0,80),sequence:1};
   if (!chapter) return null;
-  const recentUnit = (project?.drafts || []).find((draft) => draft.mode === 'api' && draft.thesisUnit?.chapterId === chapter.id && /上一版|上一节|上节|本节|该节|修改|润色|完善|改写|重写/.test(text(task)));
+  const recentUnit = (project?.drafts || []).find((draft) => draft.mode === 'api' && (!conversationId||draft.conversationId===conversationId) && draft.thesisUnit?.chapterId === chapter.id && /修改|润色|完善|改写|重写|上一版/.test(text(task)));
   if (recentUnit?.thesisUnit) return { ...recentUnit.thesisUnit, revisedFrom: recentUnit.id };
   const sequence = Math.max(0, ...(project?.drafts || [])
     .filter((draft) => draft.thesisUnit?.chapterId === chapter.id)
@@ -126,15 +174,18 @@ function createThesisUnit(project, workflow, task) {
 function ensureThesisControl(project) {
   const profile = normalizeThesisProfile(project?.thesisProfile);
   const existing = project?.thesisControl || {};
-  const chapters = existing.chapters?.length
-    ? existing.chapters.map((chapter, index) => ({ ...buildChapterPlan({ ...project, thesisProfile: profile })[index], ...chapter, sectionIds: chapter.sectionIds || CHAPTER_SECTION_IDS[index] }))
-    : buildChapterPlan({ ...project, thesisProfile: profile });
+  const proposed=buildChapterPlan({ ...project, thesisProfile: profile });
+  const chapters = profile.outlineConfirmed && profile.outline.length
+    ? proposed.map(c=>({...c,...Object.fromEntries(Object.entries(existing.chapters?.find(old=>old.id===c.id)||{}).filter(([key])=>['status','generatedWords'].includes(key)))}))
+    : existing.chapters?.length ? existing.chapters.map((chapter,index)=>({...chapter,sectionIds:chapter.sectionIds||CHAPTER_SECTION_IDS[index]||[]})) : proposed;
   return {
-    version: 1,
+    version: 2,
     status: existing.status || 'planning',
     profile,
     chapters,
     literatureMatrix: existing.literatureMatrix || [],
+    outlineConfirmed: profile.outlineConfirmed,
+    activeUnits: existing.activeUnits || {},
     updatedAt: existing.updatedAt || null,
   };
 }
@@ -149,9 +200,9 @@ function buildReadinessDraft(project) {
       ? ['访谈提纲/记录、观察记录、案例或文本材料', '对象/文本的纳入与排除范围、时间和地点边界', '编码或分析步骤、匿名与伦理处理说明']
       : ['可使用的核心文献与已有材料', '研究对象、范围、方法和材料来源', '学校模板、导师要求或目标期刊规范'];
   const rows = plan.map((chapter) => `| ${chapter.title} | 约 ${chapter.targetWords} 字 | ${chapter.purpose} | ${chapter.evidenceNeeds} |`).join('\n');
-  return {
-    title: '5 万字论文总控台账：请先补齐研究资源',
-    task: '建立 5 万字硕士论文总控台账',
+  const draft = {
+    title: `${profile.targetWords} 字论文研究台账`,
+    task: `建立${project.type||'论文'}研究台账`,
     mode: 'thesis-readiness',
     content: `# 5 万字论文总控台账\n\n系统将把论文拆成可组装的章节与小节，而不是一次生成全文。每一轮生成都会携带已确认的研究问题、用户观点、方法、材料口径与章节职责；缺失信息不会被模型补造。\n\n## 当前必须确认\n\n${missing.length ? missing.map((item, index) => `${index + 1}. ${item}`).join('\n') : '资料已达到启动论证蓝图的最低要求。'}\n\n请在“编辑项目”的**长论文档案**中补齐，或直接在对话中按以上顺序提供。\n\n## 请准备的资源\n\n${resourceHints.map((item) => `- ${item}`).join('\n')}\n\n注意：分析目标可以说明“希望检验什么关系或机制”，不能要求系统制造显著性、阈值、正向/负向结果。\n\n## 建议章节与字数预算\n\n| 章节 | 目标字数 | 本章职责 | 生成前需要的主要资源 |\n| --- | ---: | --- | --- |\n${rows}\n\n合计约 ${profile.targetWords} 字。资料补齐后，系统先生成可确认的章节论证图与文献综述矩阵，再逐小节生成、质检、回写进度，最后按章节顺序组装全文。`,
     citations: [],
@@ -159,6 +210,7 @@ function buildReadinessDraft(project) {
     checks: missing.length ? ['长论文资源未齐，不生成正文。'] : ['可开始生成章节论证图。'],
     thesisControl: { ...ensureThesisControl(project), status: missing.length ? 'awaiting-resources' : 'ready-for-blueprint' },
   };
+  return {...draft,content:draft.content.replace(/5 万字/g,`${profile.targetWords} 字`).replace(/长论文档案/g,'研究档案与论文目录')};
 }
 
 function extractKeywords(statement) {
@@ -210,14 +262,15 @@ function updateThesisProgress(project, draft) {
       || resolveThesisChapter(project, candidate)
       || control.chapters.find((item) => candidate.workflow?.section && item.title.includes(candidate.workflow.section));
     if (!chapter) continue;
-    generatedWordsByChapter.set(chapter.id, (generatedWordsByChapter.get(chapter.id) || 0) + text(candidate.content).replace(/\s/g, '').length);
+    generatedWordsByChapter.set(chapter.id, (generatedWordsByChapter.get(chapter.id) || 0) + plainWords(candidate.content));
   }
   for (const chapter of control.chapters) {
     chapter.generatedWords = generatedWordsByChapter.get(chapter.id) || 0;
-    chapter.status = chapter.generatedWords >= chapter.targetWords ? 'drafted' : chapter.generatedWords ? 'in-progress' : 'planned';
+    chapter.status = chapter.generatedWords > 0 && (!chapter.targetWords || chapter.generatedWords >= chapter.targetWords) ? 'drafted' : chapter.generatedWords ? 'in-progress' : 'planned';
   }
   control.status = control.chapters.every((item) => item.status === 'drafted') ? 'ready-for-integration' : 'writing';
   control.updatedAt = new Date().toISOString();
+  if(draft?.thesisUnit&&draft.conversationId)control.activeUnits={...control.activeUnits,[draft.conversationId]:{chapterId:draft.thesisUnit.chapterId,unitId:draft.thesisUnit.id,draftId:draft.id}};
   return control;
 }
 
@@ -254,41 +307,14 @@ function buildAssemblyContext(project, maxCharacters = 9000) {
 }
 
 function buildAssembledThesis(project) {
-  const control = ensureThesisControl(project);
-  const latestByUnit = new Map();
-  for (const draft of project?.drafts || []) {
-    if (draft.mode !== 'api' || !text(draft.content) || !draft.thesisUnit?.id) continue;
-    const existing = latestByUnit.get(draft.thesisUnit.id);
-    if (!existing || new Date(draft.updatedAt || 0) > new Date(existing.updatedAt || 0)) latestByUnit.set(draft.thesisUnit.id, draft);
-  }
-  for(const [unitId,draftId] of Object.entries(project.assemblySelections||{})){
-    const chosen=(project.drafts||[]).find(draft=>draft.id===draftId&&draft.mode==='api'&&draft.thesisUnit?.id===unitId&&text(draft.content));
-    if(chosen)latestByUnit.set(unitId,chosen);
-  }
-  const units = [...latestByUnit.values()];
-  const sections = control.chapters.map((chapter) => units
-    .filter((draft) => draft.thesisUnit.chapterId === chapter.id)
-    .sort((left, right) => (left.thesisUnit.sequence || 0) - (right.thesisUnit.sequence || 0))
-    .map((draft) => text(draft.content))
-    .join('\n\n')).filter(Boolean);
-  const draftedWords = units.reduce((total, draft) => total + text(draft.content).replace(/\s/g, '').length, 0);
-  const checks = [];
-  if (!sections.length) checks.push('尚无可组装的正式正文单元。请先完成并确认至少一个章节单元。');
-  if (draftedWords < control.profile.targetWords) checks.push(`当前可组装正文约 ${draftedWords} 字，低于目标 ${control.profile.targetWords} 字；请继续补齐章节单元后再定稿。`);
-  if (control.chapters.some((chapter) => !units.some((draft) => draft.thesisUnit.chapterId === chapter.id))) checks.push('部分章节尚无正式正文单元；导出稿仅包含已有章节，不会虚构缺失内容。');
-  return {
-    title: `${text(project?.title) || '论文'}（组装草稿）`,
-    task: '按章节顺序组装当前论文草稿',
-    content: sections.join('\n\n'),
-    citations: [...new Set(units.flatMap((draft) => draft.citations || []))],
-    mappings: [],
-    checks,
-    mode: 'assembled-thesis',
-    thesisControl: control,
-  };
+  return require('./thesis-assembly').assemble(project);
 }
 
 module.exports = {
+  defaultTargetWords,
+  normalizeOutline,
+  supportsAssembly,
+  buildChapterPlan,
   auditParagraphLogic,
   auditViewpointAlignment,
   buildAssembledThesis,

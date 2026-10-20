@@ -22,19 +22,25 @@ const OPERATION_SKILLS = {
   polish: [LEGACY_IDS.revision, CORE_SKILL_ID],
   expand: [CORE_SKILL_ID],
   empirical: [WRITING_SKILL_ID, CORE_SKILL_ID],
+  compress: ['paper-pet::editing'],
+  translate: ['paper-pet::abstract'],
+  restructure: ['paper-pet::editing'],
 };
 
-const OPERATION_LABEL = { polish: '润色', expand: '扩写', empirical: '改为实证风格' };
+const OPERATION_LABEL = { polish: '润色', expand: '扩写', empirical: '改为实证风格', compress: '压缩', translate: '翻译为学术英文', restructure: '重组论证' };
 
 const OPERATION_INSTRUCTION = {
   polish: '润色这段文字：在保持原意、论点、结构与引用标记不变的前提下，提升表达的专业性、流畅度与学术规范。',
   expand: '扩写这段文字：围绕原论点补充论证、解释或例证，使内容更充实；保持原意与引用标记不变。',
   empirical: '将这段文字改写为实证研究风格：强化对数据、变量、显著性、效应量等实证表述；保持原论点与引用标记不变。',
+  compress: '压缩这段文字：删除赘述和重复，保持论点、必要限定、全部事实、数字与引用，不新增结论。',
+  translate: '将这段文字翻译为学术英文：保持原意、术语、全部数字、限定与引用，不新增事实。仅此操作使用英文。',
+  restructure: '重组这段文字的论证：改善句间逻辑与衔接，不改变论点、证据、事实、数字或引用归属，不新增结论。',
 };
 
 function buildSystemPrompt(operation, skillPrompt) {
   const instruction = OPERATION_INSTRUCTION[operation] || OPERATION_INSTRUCTION.polish;
-  return `你是严谨的学术写作助手。遵循项目语言与引用格式，保留原文语言；用户会给你一段论文草稿中的文字，要求你只对这一段做局部修改。
+  return `你是严谨的学术写作助手。遵循项目引用格式；${operation === 'translate' ? '本次明确翻译为学术英文' : '保留原文语言'}。用户会给你一段论文草稿中的文字，要求你只对这一段做局部修改。
 
 操作要求：
 ${instruction}
@@ -46,12 +52,12 @@ ${instruction}
 4. 只改动这一段文字本身，不要补章节标题、不要接续新内容。${skillPrompt || ''}`;
 }
 
-async function applyLocalEdit({ skillRuntime, requestModel, project, draft = null, selectedText, selectedHtml, operation }) {
+async function applyLocalEdit({ skillRuntime, requestModel, project, draft = null, selectedText, selectedHtml, operation, settings={} }) {
   const skillIds = OPERATION_SKILLS[operation] || OPERATION_SKILLS.polish;
-  const { prompt } = skillRuntime.composePrompt(project, selectedText, skillIds);
+  const { prompt } = skillRuntime.composePrompt(project, `${OPERATION_LABEL[operation] || '润色'}：${selectedText}`, skillIds, 12000, { role: 'writer' });
   const messages = [
-    { role: 'system', content: buildSystemPrompt(operation, prompt) },
-    { role: 'user', content: `${projectSettingsContext(project)}\n\n请${OPERATION_LABEL[operation] || '润色'}下面这段文字（保留 HTML 脚注属性）：\n\n${selectedHtml || selectedText}` },
+    { role: 'system', content: buildSystemPrompt(operation, prompt)+'\n'+require('./context-policy').writingPreferencesContext(settings) },
+    { role: 'user', content: `${projectSettingsContext(project, settings)}\n\n请${OPERATION_LABEL[operation] || '润色'}下面这段文字（保留 HTML 脚注属性）：\n\n${selectedHtml || selectedText}` },
   ];
   const res = await requestModel({ scenario: 'writing', messages, options: { temperature: 0.25, maxTokens: 2400 } });
   const content = String(res?.content || '').trim();

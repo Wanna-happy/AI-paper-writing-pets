@@ -1,0 +1,465 @@
+[
+  {
+    "domain": "社会学",
+    "task": "写研究背景",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::introduction",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::introduction",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "02-luwill-research-skills::research-proposal",
+      "43-wentorai-research-plugins::social-science-skills",
+      "43-wentorai-research-plugins::social-research-methods",
+      "43-wentorai-research-plugins::stata-analyst-guide",
+      "43-wentorai-research-plugins::survey-research-guide",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "撰写绪论",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::introduction",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::introduction",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "43-wentorai-research-plugins::education-skills",
+      "17-DAAF-Contribution-Community-daaf::education-data-source-crdc",
+      "17-DAAF-Contribution-Community-daaf::education-data-source-meps",
+      "43-wentorai-research-plugins::educational-research-methods",
+      "43-wentorai-research-plugins::social-science-skills",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "根据已有正文写摘要和关键词",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::abstract",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::abstract",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "paper-pet::evidence",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "paper-pet::introduction",
+      "43-wentorai-research-plugins::education-skills",
+      "67-econfin-workflow-toolkit::journal-digest"
+    ]
+  },
+  {
+    "domain": "管理学",
+    "task": "写讨论与研究局限",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::discussion",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::discussion",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "paper-pet::conclusion",
+      "paper-pet::design",
+      "paper-pet::qualitative",
+      "43-wentorai-research-plugins::strategic-management-guide",
+      "69-Paper-WorkFlow::paper-workflow",
+      "paper-pet::abstract"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "写论文结论",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::conclusion",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::conclusion",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "paper-pet::introduction",
+      "42-wanshuiyin-ARIS::paper-write",
+      "42-wanshuiyin-ARIS::paper-writing",
+      "67-econfin-workflow-toolkit::paper-writer",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "65-game-theory-paper-writer::game-theory-paper-writer"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "撰写文献综述",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::evidence",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::evidence",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "68-research-productivity-skills::literature-survey-generator",
+      "43-wentorai-research-plugins::education-skills",
+      "67-econfin-workflow-toolkit::journal-digest",
+      "02-luwill-research-skills::medical-imaging-review"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "制定选题和开题报告",
+    "role": "coordinator",
+    "fallback": [
+      "paper-pet::design",
+      "69-Paper-WorkFlow::paper-workflow"
+    ],
+    "top8": [
+      "paper-pet::design",
+      "69-Paper-WorkFlow::paper-workflow",
+      "67-econfin-workflow-toolkit::econfin-idea-finder",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "42-wanshuiyin-ARIS::idea-discovery-robot",
+      "65-game-theory-paper-writer::game-theory-paper-writer",
+      "17-DAAF-Contribution-Community-daaf::education-data-context",
+      "25-HosungYou-Diverga::research-coordinator"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "建立理论框架",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::design",
+      "04-K-Dense-AI-claude-scientific-writer::hypothesis-generation",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::design",
+      "04-K-Dense-AI-claude-scientific-writer::hypothesis-generation",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "paper-pet::discussion",
+      "paper-pet::qualitative",
+      "67-econfin-workflow-toolkit::chinese-ppt2",
+      "17-DAAF-Contribution-Community-daaf::education-data-context",
+      "25-HosungYou-Diverga::research-coordinator"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "研究设计与研究方法",
+    "role": "coordinator",
+    "fallback": [
+      "paper-pet::design",
+      "69-Paper-WorkFlow::paper-workflow"
+    ],
+    "top8": [
+      "paper-pet::design",
+      "69-Paper-WorkFlow::paper-workflow",
+      "paper-pet::qualitative",
+      "24-Imbad0202-academic-research-skills::deep-research",
+      "42-wanshuiyin-ARIS::research-refine",
+      "43-wentorai-research-plugins::social-science-skills",
+      "67-econfin-workflow-toolkit::econfin-idea-finder",
+      "02-luwill-research-skills::research-proposal"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "分析教师访谈并开展主题分析",
+    "role": "analyst",
+    "fallback": [
+      "paper-pet::qualitative",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis"
+    ],
+    "top8": [
+      "paper-pet::qualitative",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis",
+      "43-wentorai-research-plugins::education-skills",
+      "17-DAAF-Contribution-Community-daaf::education-data-source-crdc",
+      "17-DAAF-Contribution-Community-daaf::education-data-source-meps",
+      "43-wentorai-research-plugins::educational-research-methods",
+      "43-wentorai-research-plugins::social-science-skills",
+      "69-Paper-WorkFlow::paper-workflow"
+    ]
+  },
+  {
+    "domain": "管理学",
+    "task": "开展案例研究与扎根理论编码",
+    "role": "analyst",
+    "fallback": [
+      "paper-pet::qualitative",
+      "43-wentorai-research-plugins::grounded-theory-guide",
+      "43-wentorai-research-plugins::qualitative-research-guide"
+    ],
+    "top8": [
+      "paper-pet::qualitative",
+      "43-wentorai-research-plugins::grounded-theory-guide",
+      "43-wentorai-research-plugins::qualitative-research-guide",
+      "43-wentorai-research-plugins::strategic-management-guide",
+      "69-Paper-WorkFlow::paper-workflow",
+      "paper-pet::preparation",
+      "02-luwill-research-skills::research-proposal",
+      "24-Imbad0202-academic-research-skills::deep-research"
+    ]
+  },
+  {
+    "domain": "医学",
+    "task": "写系统综述 PRISMA",
+    "role": "collector",
+    "fallback": [
+      "paper-pet::review",
+      "52-keemanxp-slr-prisma::slr-prisma"
+    ],
+    "top8": [
+      "paper-pet::review",
+      "52-keemanxp-slr-prisma::slr-prisma",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "43-wentorai-research-plugins::systematic-review-guide",
+      "paper-pet::evidence",
+      "00-Full-empirical-analysis-skill_StatsPAI::StatsPAI_skill",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "00.2-Full-empirical-analysis-skill_Stata::Full-empirical-analysis-skill-Stata"
+    ]
+  },
+  {
+    "domain": "心理学",
+    "task": "进行Meta分析，合并效应量与异质性检验",
+    "role": "analyst",
+    "fallback": [
+      "paper-pet::review",
+      "43-wentorai-research-plugins::meta-analysis-guide"
+    ],
+    "top8": [
+      "paper-pet::review",
+      "43-wentorai-research-plugins::meta-analysis-guide",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "67-econfin-workflow-toolkit::ml-causal",
+      "24-Imbad0202-academic-research-skills::deep-research",
+      "67-econfin-workflow-toolkit::panel-data",
+      "67-econfin-workflow-toolkit::stats"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "设计问卷与测量量表",
+    "role": "coordinator",
+    "fallback": [
+      "paper-pet::questionnaire",
+      "43-wentorai-research-plugins::questionnaire-design-guide",
+      "69-Paper-WorkFlow::paper-workflow"
+    ],
+    "top8": [
+      "paper-pet::questionnaire",
+      "69-Paper-WorkFlow::paper-workflow",
+      "43-wentorai-research-plugins::questionnaire-design-guide",
+      "paper-pet::design",
+      "43-wentorai-research-plugins::education-skills",
+      "17-DAAF-Contribution-Community-daaf::education-data-source-crdc",
+      "17-DAAF-Contribution-Community-daaf::education-data-source-meps",
+      "43-wentorai-research-plugins::educational-research-methods"
+    ]
+  },
+  {
+    "domain": "心理学",
+    "task": "开展信效度检验与SEM CFA",
+    "role": "analyst",
+    "fallback": [
+      "paper-pet::questionnaire",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "paper-pet::questionnaire",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "67-econfin-workflow-toolkit::rdd-analysis",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis",
+      "61-phdemotions-research-methods::data-profile",
+      "00.2-Full-empirical-analysis-skill_Stata::Full-empirical-analysis-skill-Stata"
+    ]
+  },
+  {
+    "domain": "经济学",
+    "task": "开展面板固定效应和双重差分DID",
+    "role": "analyst",
+    "fallback": [
+      "67-econfin-workflow-toolkit::did-analysis",
+      "67-econfin-workflow-toolkit::panel-data",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "67-econfin-workflow-toolkit::panel-data",
+      "67-econfin-workflow-toolkit::did-analysis",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "66-zheng-siyao-empirical-research-skills::did-reviewer",
+      "00-Full-empirical-analysis-skill_StatsPAI::StatsPAI_skill",
+      "00.3-Full-empirical-analysis-skill_R::Full-empirical-analysis-skill-R",
+      "67-econfin-workflow-toolkit::ml-causal",
+      "66-zheng-siyao-empirical-research-skills::latex-table"
+    ]
+  },
+  {
+    "domain": "经济学",
+    "task": "开展现代错位DID与事件研究",
+    "role": "analyst",
+    "fallback": [
+      "67-econfin-workflow-toolkit::did-analysis",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "67-econfin-workflow-toolkit::did-analysis",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "67-econfin-workflow-toolkit::figure",
+      "00-Full-empirical-analysis-skill_StatsPAI::StatsPAI_skill",
+      "00.3-Full-empirical-analysis-skill_R::Full-empirical-analysis-skill-R",
+      "67-econfin-workflow-toolkit::Econfin-Proposal",
+      "00.2-Full-empirical-analysis-skill_Stata::Full-empirical-analysis-skill-Stata",
+      "27-dariia-m-my_claude_skills::event-study"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "执行DTW聚类、LightGBM预测、TreeSHAP解释与LOWESS",
+    "role": "analyst",
+    "fallback": [
+      "paper-pet::prediction",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "paper-pet::prediction",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "paper-pet::questionnaire",
+      "43-wentorai-research-plugins::social-science-skills",
+      "43-wentorai-research-plugins::social-research-methods",
+      "43-wentorai-research-plugins::stata-analyst-guide",
+      "43-wentorai-research-plugins::survey-research-guide",
+      "53-keemanxp-thematic-analysis-skill::thematic-analysis"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "数据清洗缺失值处理与变量构造",
+    "role": "preparer",
+    "fallback": [
+      "paper-pet::preparation",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "paper-pet::preparation",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "66-zheng-siyao-empirical-research-skills::codebook-pass",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "43-wentorai-research-plugins::social-science-skills",
+      "66-zheng-siyao-empirical-research-skills::R-optimizer",
+      "67-econfin-workflow-toolkit::iv-estimation"
+    ]
+  },
+  {
+    "domain": "工学",
+    "task": "预测建模与交叉验证，避免数据泄漏",
+    "role": "analyst",
+    "fallback": [
+      "paper-pet::prediction",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill"
+    ],
+    "top8": [
+      "paper-pet::prediction",
+      "00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill",
+      "paper-pet::questionnaire",
+      "paper-pet::results",
+      "69-Paper-WorkFlow::paper-workflow",
+      "paper-pet::preparation",
+      "paper-pet::review",
+      "65-game-theory-paper-writer::game-theory-paper-writer"
+    ]
+  },
+  {
+    "domain": "教育学",
+    "task": "核验参考文献DOI与文中引用",
+    "role": "collector",
+    "fallback": [
+      "paper-pet::evidence",
+      "67-econfin-workflow-toolkit::reference-verify"
+    ],
+    "top8": [
+      "paper-pet::evidence",
+      "67-econfin-workflow-toolkit::reference-verify",
+      "36-taoyunudt-literature-review-skill::literature-review",
+      "43-wentorai-research-plugins::education-skills",
+      "66-zheng-siyao-empirical-research-skills::citation-fidelity",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "68-research-productivity-skills::literature-survey-generator",
+      "17-DAAF-Contribution-Community-daaf::education-data-source-crdc"
+    ]
+  },
+  {
+    "domain": "文学",
+    "task": "将中文摘要翻译成英文",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::abstract",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::abstract",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::chinese-quote-converter",
+      "67-econfin-workflow-toolkit::fix-chinese",
+      "67-econfin-workflow-toolkit::journal-digest",
+      "71-brycewang-lit-review-agent-tools::literature-review-tools",
+      "24-Imbad0202-academic-research-skills::academic-paper",
+      "36-taoyunudt-literature-review-skill::literature-review"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "润色和压缩正文并保持原意",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::editing",
+      "67-econfin-workflow-toolkit::readability",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::editing",
+      "67-econfin-workflow-toolkit::readability",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "paper-pet::abstract",
+      "43-wentorai-research-plugins::social-science-skills",
+      "43-wentorai-research-plugins::social-research-methods",
+      "43-wentorai-research-plugins::stata-analyst-guide",
+      "43-wentorai-research-plugins::survey-research-guide"
+    ]
+  },
+  {
+    "domain": "社会学",
+    "task": "结果解释与实证正文写作",
+    "role": "writer",
+    "fallback": [
+      "paper-pet::results",
+      "67-econfin-workflow-toolkit::paper-writer",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing"
+    ],
+    "top8": [
+      "paper-pet::results",
+      "04-K-Dense-AI-claude-scientific-writer::scientific-writing",
+      "67-econfin-workflow-toolkit::paper-writer",
+      "69-Paper-WorkFlow::paper-workflow",
+      "67-econfin-workflow-toolkit::China-CF-Study",
+      "67-econfin-workflow-toolkit::Foreign-CF-Study",
+      "paper-pet::abstract",
+      "paper-pet::design"
+    ]
+  }
+]

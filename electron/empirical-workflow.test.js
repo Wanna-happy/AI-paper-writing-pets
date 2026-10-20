@@ -39,6 +39,9 @@ try {
   const parse = v => e.parseResult('log\nPAPER_PET_RESULT=' + JSON.stringify(v), { plan: approved, step: approved.steps[0], sourceFingerprint: approved.dataFingerprint });
   const result = parse(value);
   assert.equal(result.projectId, 'p');
+  assert.equal(result.validation.statisticalCorrectness, 'not-certified');
+  assert.equal(result.validation.diagnostics, 'not-reported');
+  assert.throws(() => e.parseResult('PAPER_PET_RESULT=' + JSON.stringify(value), { plan: approved, step: approved.steps[0], sourceFingerprint: 'different-data' }), /指纹/);
   assert.throws(() => parse({ ...value, stepId: 'a9' }), /不一致/);
   assert.throws(() => parse({ ...value, tables: [] }), /结果表/);
   assert.throws(() => parse({ ...value, tables: [{ ...value.tables[0], rows: [['x']] }] }), /第 1 张表「OLS回归」第 1 行有 1 个单元格，表头有 2 列/);

@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),changes=require('./turn-changes');
+const project={id:'p',conversations:[{id:'c'}],drafts:[]},other={id:'other',conversations:[{id:'x'}],drafts:[]};
+const store={loadWorkspace:()=>({projects:[project,other]}),updateProject:(id,patch)=>Object.assign([project,other].find(p=>p.id===id),patch)};
+const before={id:'d',conversationId:'c',title:'文稿',content:'旧文',revision:'a',updatedAt:'2026-10-20T00:00:00Z'};
+const after={...before,content:'新文',revision:'b',changeOrigin:'agent',runId:'run-1'};
+changes.record(project,before,after);project.drafts=[after];
+const added={...after,id:'new',title:'新增',content:'新文件'};changes.record(project,null,added);changes.record(project,added,{...added,content:'新增后继续写'});assert.equal(project.turnChanges['run-1'].entries.find(e=>e.draftId==='new').kind,'added');project.drafts.push({...added,content:'新增后继续写'});
+assert.throws(()=>changes.review(store,'p','wrong','run-1'),/对话不属于/);assert.deepEqual(changes.review(store,'other','x','run-1').entries,[]);
+const original=JSON.stringify(project.drafts);project.drafts[0]={...after,content:'用户后续修改'};assert.throws(()=>changes.undo(store,'p','c','run-1'),/未执行任何撤销/);assert.equal(project.drafts[0].content,'用户后续修改');assert.equal(project.drafts[1].content,'新增后继续写');
+project.drafts=JSON.parse(original);const result=changes.undo(store,'p','c','run-1');assert.equal(result.undone,1);assert.equal(project.drafts[0].content,'旧文');assert.equal(project.drafts[1].content,'新增后继续写');assert(project.turnChanges['run-1'].undoneAt);assert.throws(()=>changes.undo(store,'p','c','run-1'),/已撤销/);assert.deepEqual(other.drafts,[]);
+const multi={id:'q',conversations:[{id:'c'}],drafts:[]};for(const id of ['a','b']){const old={...before,id},next={...after,id};changes.record(multi,old,next);multi.drafts.push(next);}multi.drafts[1].content='其他任务更新';const multiStore={loadWorkspace:()=>({projects:[multi]}),updateProject:()=>{throw new Error('不应写入');}};assert.throws(()=>changes.undo(multiStore,'q','c','run-1'),/未执行任何撤销/);assert.equal(multi.drafts[0].content,'新文');
+console.log('Targeted turn changes: original snapshot, added-file retention, repeated agent saves, conflict preflight, atomic batch rejection, project/conversation ownership and repeated undo passed');

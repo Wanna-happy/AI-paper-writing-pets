@@ -17,8 +17,8 @@ async function main() {
   assert.equal(publicAddress('8.8.8.8'), true);
   await assert.rejects(publicUrl('http://127.0.0.1/'), /内网/);
   await assert.rejects(publicUrl('file:///C:/secret'), /HTTP/);
-  await assert.rejects(searchWeb({ query: 'test', loadSettings: () => ({}) }), /未开启联网/);
-  await assert.rejects(collectData({ urls: ['https://example.com'], loadSettings: () => ({}) }), /未开启联网/);
+  await assert.rejects(searchWeb({ query: 'test', loadSettings: () => ({}) }), {code:'PERMISSION_DENIED'});
+  await assert.rejects(collectData({ urls: ['https://example.com'], loadSettings: () => ({}) }), {code:'PERMISSION_DENIED'});
   console.log('Pipeline dependency/coverage/authorization, role permissions, public-source limits passed');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -39,13 +39,13 @@ function routePlan({ intent, plan, task, empiricalPlan, planningSkill }) {
     `任务规划未得到有效的写作任务，请说明尚缺信息并承接原要求：${task}。不要自行执行分析。`);
   return { ...plan, branch: 'writing', intent, tasks: plan.tasks.map(t => ({ ...t, branch: t.role === 'chat' ? 'research' : 'writing' })) };
 }
-const COMMON_TOOLS = ['read_conversation_history', 'read_analysis_result', 'search_research_skills', 'read_research_skill'];
+const COMMON_TOOLS = ['read_conversation_history', 'read_analysis_result', 'search_research_skills', 'read_research_skill', 'get_research_capabilities'];
 const BRANCH_TOOLS = {
-  collection: [...COMMON_TOOLS, 'search_web', 'collect_data', 'retrieve_context', 'submit_clarification'],
+  collection: [...COMMON_TOOLS, 'search_web', 'lookup_scholarly_metadata', 'collect_data', 'retrieve_context', 'submit_clarification'],
   preparation: [...COMMON_TOOLS, 'inspect_data_file', 'prepare_data_file', 'submit_clarification'],
-  conversation: COMMON_TOOLS,
-  research: [...COMMON_TOOLS, 'retrieve_context', 'submit_clarification'],
-  clarification: [...COMMON_TOOLS, 'submit_clarification'],
+  conversation: [...COMMON_TOOLS, 'submit_thesis_outline'],
+  research: [...COMMON_TOOLS, 'submit_thesis_outline', 'lookup_scholarly_metadata', 'retrieve_context', 'submit_clarification'],
+  clarification: [...COMMON_TOOLS, 'submit_thesis_outline', 'submit_clarification'],
   inspection: [...COMMON_TOOLS, 'inspect_data_file', 'submit_clarification'],
   environment: [...COMMON_TOOLS, 'install_python_dependency'],
   'analysis-proposal': [...COMMON_TOOLS, 'inspect_data_file', 'prepare_data_file', 'install_python_dependency', 'submit_clarification', 'submit_analysis_plan'],

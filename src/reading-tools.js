@@ -1,10 +1,10 @@
 window.ReadingTools={mount(viewer,artifact){
   const data=artifact.upload||artifact.filePreview;
   if(!data||!['docx','spreadsheet','document'].includes(data.type))return;
-  const details=node('details','reading-tools'),summary=node('summary');summary.textContent='查找与定位';
+  const details=node('section','reading-tools'),toggle=WritingWorkbench.button('查找',()=>{details.hidden=!details.hidden;if(!details.hidden)query.focus();});toggle.setAttribute('aria-label','查找文档');details.hidden=true;
   const form=node('form'),query=node('input'),location=node('input'),status=node('output'),results=node('div','reading-results');
   query.type='search';query.placeholder='查找文档内容';query.setAttribute('aria-label','查找文档内容');query.maxLength=200;status.setAttribute('role','status');status.setAttribute('aria-live','polite');
-  location.placeholder=data.type==='spreadsheet'?'单元格，例如 C120':'页码';location.setAttribute('aria-label',location.placeholder);
+  location.placeholder=data.type==='spreadsheet'?'单元格，例如 C120':'跳转页码';location.setAttribute('aria-label',location.placeholder);
   let index=0,lastQuery='',pdfMatches=null;const find=node('button');find.type='submit';find.textContent=data.type==='document'?'查找全文':'查找下一处';
   const locate=WritingWorkbench.button('定位',()=>{
     if(data.type==='document'){
@@ -12,7 +12,7 @@ window.ReadingTools={mount(viewer,artifact){
       viewer.querySelector(`[data-page="${Number(location.value)}"]`)?.scrollIntoView({block:'start'});
     }else viewer.querySelector('iframe')?.contentWindow.postMessage({type:'preview-locate',value:location.value},'*');
   });
-  form.append(query,find,location,locate,status);details.append(summary,form,results);viewer.prepend(details);
+  form.append(query,find,location,locate,WritingWorkbench.button('关闭',()=>{details.hidden=true;}),status);details.append(form,results);viewer.prepend(details);document.getElementById('preview-document-controls').append(toggle);
   form.addEventListener('submit',async event=>{
     event.preventDefault();if(!query.value.trim())return;
     if(query.value!==lastQuery){index=0;lastQuery=query.value;pdfMatches=null;}

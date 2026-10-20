@@ -19,6 +19,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 
+const {DEFAULT_FORMATTING,normalizeFormatting,paragraphSpacing}=require('./document-formatting');
 const FONT_BODY = '宋体';
 const FONT_HEADING = '黑体';
 const FONT_LATIN = 'Times New Roman';
@@ -31,8 +32,8 @@ const PAGE = {
 function textRun(text, options = {}) {
   return new TextRun({
     text,
-    font: { ascii: FONT_LATIN, eastAsia: options.heading ? FONT_HEADING : FONT_BODY, hAnsi: FONT_LATIN },
-    size: options.size || 28,
+    font: { ascii: options.format?.latinFont||FONT_LATIN, eastAsia: options.heading ? options.format?.headingFont||FONT_HEADING : options.format?.bodyFont||FONT_BODY, hAnsi: options.format?.latinFont||FONT_LATIN },
+    size: options.size || (options.format?.bodySize||14)*2,
     bold: Boolean(options.bold),
     italics: Boolean(options.italics),
   });
@@ -92,13 +93,14 @@ function parsePaperHtml(content) {
   return blocks;
 }
 
-function contentParagraph(block) {
+function contentParagraph(block,format=DEFAULT_FORMATTING) {
+  const run=(text,options={})=>textRun(text,{...options,format});
   if (block.type === 'table') {
     const none = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
     const row = (cells, bold = false) => new TableRow({
       children: cells.map((cell) => new TableCell({
         borders: { top: none, bottom: bold ? { style: BorderStyle.SINGLE, size: 4, color: '000000' } : none, left: none, right: none },
-        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [textRun(cell, { size: 20, bold })] })],
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [run(cell, { size: 20, bold })] })],
       })),
     });
     return new Table({
@@ -114,67 +116,70 @@ function contentParagraph(block) {
   }
   if (block.type === 'image') {
     const image = readEmbeddedImage(block.src);
-    if (!image) return new Paragraph({ children: [textRun(`图像文件不可用：${block.caption || block.src}`, { size: 20 })] });
+    if (!image) return new Paragraph({ children: [run(`图像文件不可用：${block.caption || block.src}`, { size: 20 })] });
     const extension = image.extension;
-    if (extension !== '.png' && extension !== '.jpg' && extension !== '.jpeg' && extension !== '.svg') return new Paragraph({ children: [textRun(`图像格式暂不支持 Word 嵌入：${block.caption || block.src}`, { size: 20 })] });
+    if (extension !== '.png' && extension !== '.jpg' && extension !== '.jpeg' && extension !== '.svg') return new Paragraph({ children: [run(`图像格式暂不支持 Word 嵌入：${block.caption || block.src}`, { size: 20 })] });
     return [
       new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ data: image.data, transformation: { width: 500, height: 310 }, type: extension === '.png' ? 'png' : extension === '.svg' ? 'svg' : 'jpg' })] }),
-      ...(block.caption ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 80, after: 160 }, children: [textRun(block.caption, { size: 22 })] })] : []),
+      ...(block.caption ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 80, after: 160 }, children: [run(block.caption, { size: 22 })] })] : []),
     ];
   }
   if (block.type === 'heading') {
     const levels = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3];
-    const sizes = [36, 32, 28];
+    const sizes = [format.heading1Size,format.heading2Size,format.heading3Size].map(n=>n*2);
     return new Paragraph({
       heading: levels[block.level - 1],
       keepNext: true,
       alignment: block.level === 1 ? AlignmentType.CENTER : AlignmentType.LEFT,
-      spacing: { before: block.level === 1 ? 360 : 240, after: 180, line: 420 },
-      children: inlineRuns(block.text, { heading: true, size: sizes[block.level - 1], bold: true }),
+      spacing: { before: block.level === 1 ? 360 : 240, after: 180, ...paragraphSpacing(format) },
+      children: inlineRuns(block.text, { format, heading: true, size: sizes[block.level - 1], bold: true }),
     });
   }
-  if (block.type === 'table-title') return new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 180, after: 80 }, children: inlineRuns(block.text, { bold: true }) });
-  if (block.type === 'table-note') return new Paragraph({ alignment: AlignmentType.LEFT, spacing: { before: 60, after: 120 }, children: inlineRuns(block.text, { size: 20 }) });
+  if (block.type === 'table-title') return new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 180, after: 80 }, children: inlineRuns(block.text, { format, bold: true }) });
+  if (block.type === 'table-note') return new Paragraph({ alignment: AlignmentType.LEFT, spacing: { before: 60, after: 120 }, children: inlineRuns(block.text, { format, size: 20 }) });
   return new Paragraph({
     alignment: AlignmentType.JUSTIFIED,
-    indent: { firstLine: 560 },
-    spacing: { after: 0, line: 420, lineRule: 'auto' },
+    indent: { firstLine: Math.round(format.firstLineChars*format.bodySize*20) },
+    spacing: { after: 0, ...paragraphSpacing(format) },
     widowControl: true,
-    children: inlineRuns(block.text),
+    children: inlineRuns(block.text,{format}),
   });
 }
 
-function createHeader(project) {
+function createHeader(project,format) {
   return new Header({ children: [new Paragraph({
     alignment: AlignmentType.CENTER,
     border: { bottom: { color: '808080', style: BorderStyle.SINGLE, size: 4, space: 4 } },
-    children: [textRun(project.title || '论文项目', { size: 18 })],
+    children: [textRun(project.title || '论文项目', { size: 18,format })],
   })] });
 }
 
-function createFooter() {
+function createFooter(format) {
   return new Footer({ children: [new Paragraph({
     alignment: AlignmentType.CENTER,
-    children: [textRun('— ', { size: 18 }), new TextRun({ children: [PageNumber.CURRENT], size: 18, font: FONT_LATIN }), textRun(' —', { size: 18 })],
+    children: [textRun('— ', { size: 18,format }), new TextRun({ children: [PageNumber.CURRENT], size: 18, font: format.latinFont }), textRun(' —', { size: 18,format })],
   })] });
 }
 
-async function buildAcademicDocx(project, draft) {
+async function buildAcademicDocx(project, draft, formatting) {
+  if(formatting===undefined){try{formatting=require('./settings').loadSettings().documentFormatting;}catch{formatting=DEFAULT_FORMATTING;}}
+  const format=normalizeFormatting(formatting);
+  const page={...PAGE,margin:{...PAGE.margin,...Object.fromEntries(['Top','Right','Bottom','Left'].map(side=>[side.toLowerCase(),Math.round(format['margin'+side]*1440/2.54)]))}};
   const blocks = parsePaperHtml(draft.content);
   const footnotes = {};
   for (const note of String(draft.content || '').matchAll(/<p\s+data-footnote="(\d+)"><sup>\d+<\/sup>\s*([\s\S]*?)<\/p>/g)) {
-    footnotes[note[1]] = { children: [new Paragraph({ children: [textRun(stripHtml(note[2]), { size: 20 })] })] };
+    footnotes[note[1]] = { children: [new Paragraph({ children: [textRun(stripHtml(note[2]), { size: 20,format })] })] };
   }
   const document = new Document({
     creator: 'AI 论文宠物',
     title: draft.title || project.title || '论文内容',
     description: `${project.type || '学术论文'}当前交付内容`,
     styles: {
-      default: { document: { run: { font: FONT_BODY, size: 28 }, paragraph: { spacing: { line: 420 } } } },
+      default: { document: { run: { font: format.bodyFont, size: format.bodySize*2 }, paragraph: { spacing: paragraphSpacing(format) } } },
       paragraphStyles: [
-        { id: 'Heading1', name: '一级标题', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { font: FONT_HEADING, size: 36, bold: true }, paragraph: { alignment: AlignmentType.CENTER, keepNext: true, spacing: { before: 360, after: 280 }, outlineLevel: 0 } },
-        { id: 'Heading2', name: '二级标题', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { font: FONT_HEADING, size: 32, bold: true }, paragraph: { keepNext: true, spacing: { before: 260, after: 180 }, outlineLevel: 1 } },
-        { id: 'Heading3', name: '三级标题', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { font: FONT_HEADING, size: 28, bold: true }, paragraph: { keepNext: true, spacing: { before: 220, after: 140 }, outlineLevel: 2 } },
+        { id: 'Heading1', name: '一级标题', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { font: format.headingFont, size: format.heading1Size*2, bold: true }, paragraph: { alignment: AlignmentType.CENTER, keepNext: true, spacing: { before: 360, after: 280 }, outlineLevel: 0 } },
+        { id: 'Heading2', name: '二级标题', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { font: format.headingFont, size: format.heading2Size*2, bold: true }, paragraph: { keepNext: true, spacing: { before: 260, after: 180 }, outlineLevel: 1 } },
+        { id: 'Heading3', name: '三级标题', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { font: format.headingFont, size: format.heading3Size*2, bold: true }, paragraph: { keepNext: true, spacing: { before: 220, after: 140 }, outlineLevel: 2 } },
       ],
     },
     numbering: {
@@ -185,10 +190,10 @@ async function buildAcademicDocx(project, draft) {
     },
     footnotes,
     sections: [{
-      properties: { page: PAGE },
-      headers: { default: createHeader(project) },
-      footers: { default: createFooter() },
-      children: blocks.length ? blocks.flatMap(contentParagraph) : [new Paragraph({ children: [textRun('') ] })],
+      properties: { page },
+      headers: { default: createHeader(project,format) },
+      footers: { default: createFooter(format) },
+      children: blocks.length ? blocks.flatMap(block=>contentParagraph(block,format)) : [new Paragraph({ children: [textRun('') ] })],
     }],
   });
   return Packer.toBuffer(document);

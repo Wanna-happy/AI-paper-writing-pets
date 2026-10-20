@@ -47,6 +47,7 @@ function analysisSystemPrompt(skillPrompt, networkEnabled) {
 }
 
 async function generateAnalysisCode({ requestModel, request, dataFileName, skillPrompt = '', analysisPlan, step, networkEnabled = false }) {
+  skillPrompt += '\n' + require('../skills/method-guidance').methodGuidance(step);
   const messages = [
     { role: 'system', content: analysisSystemPrompt(skillPrompt, networkEnabled) },
     {
@@ -76,6 +77,7 @@ async function generateAnalysisCode({ requestModel, request, dataFileName, skill
 }
 
 async function repairAnalysisCode({ requestModel, code, error, step, skillPrompt = '', networkEnabled = false }) {
+  skillPrompt += '\n' + require('../skills/method-guidance').methodGuidance(step);
   const diagnostic = String(error || '').replace(/[A-Za-z]:\\[^\s"']+/g, '[local-path]').slice(-4000);
   try {
     const res = await requestModel({ scenario: 'analysis', messages: [
@@ -94,7 +96,7 @@ async function executeAnalysisCode({ code, dataFilePath, outputDir, python, user
 
   try {
     const dependencyDir = userDataPath && projectId ? currentDependencyDir(userDataPath, projectId) : null;
-    const networkEnabled = loadSettings?.().dataEnvironment?.networkEnabled === true;
+    const networkEnabled = require('../permission-policy').permissions(loadSettings?.()||{}).sandboxNetwork;
     const result = await runSandbox({ python, scriptPath, dataFilePath, outputDir, dependencyDir, networkEnabled, timeoutMs, signal });
     return { ...result, stdout: String(result.stdout || '').trim(), error: null };
   } catch (error) {
@@ -110,6 +112,7 @@ async function runDataAnalysis({
   analysisPlan = null, stepId = '', skillPrompt = '', priorResults = [],
 }) {
   const step = analysisPlan ? validateStep(analysisPlan, stepId, plan?.dataFile, resolveAttachment) : null;
+  require('../permission-policy').assertAllowed(loadSettings?.()||{},'analysis');
   const candidates = (attachments || []).filter(item => ['.csv', '.xlsx'].includes(String(item.extension || '').toLowerCase()));
   const dataFile = plan?.dataFile ? String(plan.dataFile) : candidates.length === 1 ? candidates[0].name : '';
   let source = null;
@@ -122,7 +125,7 @@ async function runDataAnalysis({
   if (!sandboxStatus.available) return { error: `${sandboxStatus.error} 为保护本机数据，已拒绝执行分析代码。`, summary: '', columns: [], files: [], code: '' };
   const analysisRequest = plan?.request || request || '对数据进行描述性统计与基础分析';
   const python = await findPython(loadSettings());
-  const networkEnabled = loadSettings()?.dataEnvironment?.networkEnabled === true;
+  const networkEnabled = require('../permission-policy').permissions(loadSettings?.()||{}).sandboxNetwork;
   let outputDir = path.join(userDataPath, 'analysis-runs', String(projectId || 'default'), randomUUID());
   // Apply the approved workbook sheet/range/filters deterministically before
   // passing data to model-generated analysis code. The model sees only this CSV.
@@ -227,6 +230,7 @@ async function runDataAnalysis({
 }
 
 async function prepareDataFile({ attachment, selection = {}, resolveAttachment, findPython, loadSettings, userDataPath, projectId, signal }) {
+  require('../permission-policy').assertAllowed(loadSettings?.()||{},'prepare');
   const source = resolveAttachment(attachment);
   if (!source || !['.csv', '.xlsx'].includes(String(attachment.extension).toLowerCase())) throw new Error('请选择当前项目的 CSV/XLSX 数据');
   selection = normalizeDataSelection(selection);

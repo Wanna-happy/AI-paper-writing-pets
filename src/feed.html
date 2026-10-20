@@ -13,9 +13,11 @@
     <main class="app-shell">
       <header class="titlebar">
         <div class="titlebar__brand"><span class="brand-mark">P</span><strong>AI 论文宠物</strong></div>
-        <div class="titlebar__project" id="titlebar-project">尚未创建项目</div>
+        <div class="titlebar__project" id="titlebar-project" hidden></div>
         <div class="window-actions">
           <button class="title-action" id="pet-mode-button" type="button">隐藏工作台</button>
+          <button class="icon-button" id="window-minimize" type="button" aria-label="最小化">−</button>
+          <button class="icon-button" id="window-maximize" type="button" aria-label="最大化" aria-pressed="false">□</button>
           <button class="icon-button" id="close-button" type="button" aria-label="关闭到宠物模式">×</button>
         </div>
       </header>
@@ -50,7 +52,7 @@
           </section>
 
           <div class="sidebar-bottom">
-            <button class="pet-mini-card" id="pet-manage-button" data-view="pet" type="button">
+            <button class="pet-mini-card" id="pet-manage-button" data-view="pet" type="button" hidden>
               <div class="pet-mini-avatar" id="pet-mini-avatar">🐕</div>
               <div><strong id="pet-name-label">小柴</strong><span id="pet-stage-label">阶段 1 · 0 MB</span></div><b>›</b>
             </button>
@@ -59,6 +61,7 @@
             </button>
             <div class="account-menu" id="account-menu" hidden>
               <button data-view="settings" type="button"><span>⚙</span>设置 <kbd>Ctrl+,</kbd></button>
+              <button data-view="pet" type="button"><span class="codicon codicon-smiley" aria-hidden="true"></span>宠物管理</button>
             </div>
             <p class="local-note"><span></span>资料默认仅保存在本机</p>
           </div>
@@ -87,6 +90,7 @@
             </div>
 
             <div class="composer-dock">
+              <button id="chat-latest" class="chat-latest" type="button" aria-label="回到最新消息" title="回到最新消息" hidden>…</button>
               <section id="empirical-plan-card" class="empirical-plan-card" aria-label="实证方案确认" hidden></section>
               <section id="clarification-card" class="clarification-card" aria-label="问题确认卡" hidden></section>
               <section id="task-progress-card" class="task-progress-card" aria-label="本轮任务进度" hidden></section>
@@ -148,6 +152,7 @@
                 <button class="is-active" data-settings-panel="account" type="button"><span>◎</span>账户管理</button>
                 <button data-settings-panel="appearance" type="button"><span>☼</span>主题外观</button>
                 <button data-settings-panel="api" type="button"><span>⌁</span>AI 配置</button>
+                <button data-settings-panel="permissions" type="button"><span>◇</span>权限</button>
                 <button data-settings-panel="personalization" type="button"><span>◌</span>个性化</button>
                 <button data-settings-panel="shortcuts" type="button"><span>⌨</span>键盘快捷键</button>
               </nav>
@@ -184,6 +189,18 @@
                 </div>
               </section>
 
+              <section class="settings-panel" data-settings-content="permissions">
+                <div class="settings-heading"><h1>权限</h1><p>选择 Agent 可以执行的操作。保存后用于后续工具调用，正在运行的操作不会被中途撤销。</p></div>
+                <div class="settings-card permission-settings">
+                  <label class="permission-row"><span><strong>执行确认</strong><small>方案确认始终保留；可额外要求每次清洗、分析、安装或网页访问前确认。</small></span><select id="permission-approval"><option value="on-request">按任务需要</option><option value="always">每次操作前确认</option></select></label>
+                  <label class="permission-row"><span><strong>数据沙箱</strong><small>只读检查可读取字段和统计信息；项目沙箱还允许清洗副本、运行分析及安装依赖。</small></span><select id="permission-sandbox"><option value="read-only">只读检查</option><option value="project">项目沙箱执行</option></select></label>
+                  <label class="permission-row"><span><strong>网页访问</strong><small>搜索仅获取公开来源链接；采集会下载公开内容并生成数据文件。</small></span><select id="permission-web"><option value="off">关闭</option><option value="search">仅搜索公开网页</option><option value="collect">搜索与数据采集</option></select></label>
+                  <label class="permission-row"><span><strong>依赖安装</strong><small>仅使用受控安装工具，写入当前项目依赖目录，不安装到系统 Python。</small></span><select id="permission-dependencies"><option value="deny">禁止安装</option><option value="ask">每次安装前确认</option><option value="allow">按任务需要安装</option></select></label>
+                  <label class="permission-row"><span><strong>分析代码联网</strong><small>单独控制 Python 沙箱的公网访问。关闭不影响已允许的网页搜索；不影响远程模型调用。</small></span><input id="data-network-enabled" type="checkbox" /></label>
+                </div>
+                <div class="settings-card permission-boundaries"><strong>始终生效的保护</strong><p>Agent 仅使用当前项目已导入的文件。上传原件保持只读；禁止创建子进程，不提供访问整台电脑的模式。手动编辑稿件、导入和导出由你操作，不受“数据沙箱只读检查”限制。</p><p>模型仍会接收本轮任务所需的内容。网页访问关闭不代表模型推理离线。</p></div>
+              </section>
+
               <section class="settings-panel" data-settings-content="personalization">
                 <div class="settings-heading"><h1>个性化</h1><p>设置默认论文语言、引用格式和助手风格。</p></div>
                 <div class="settings-card form-card"><label>默认语言<select id="default-language"><option>中文</option><option>英文</option><option>中英双语</option></select></label><label>默认引用格式<select id="default-citation"><option>GB/T 7714</option><option>APA</option><option>MLA</option><option>Chicago</option></select></label><label>写作风格<select id="writing-style"><option value="rigorous">严谨学术</option><option value="concise">简洁清晰</option><option value="explanatory">解释充分</option></select></label></div>
@@ -201,7 +218,7 @@
       </div>
     </main>
 
-    <dialog id="project-dialog"><form method="dialog" class="modal-card" id="project-form"><div class="modal-heading"><div><p class="eyebrow">论文项目</p><h2 id="project-dialog-title">新建项目</h2></div><button value="cancel" type="submit" formnovalidate>×</button></div><label>项目名称<input id="project-title" required maxlength="80" /></label><div class="form-grid"><label>论文类型<select id="project-type"><option>课程论文</option><option>开题报告</option><option selected>硕士学位论文</option><option>博士学位论文</option><option>期刊论文</option><option>研究报告</option></select></label><fieldset class="domain-picker" id="project-domains"><legend>学科领域（可多选）</legend><div class="domain-options"><label><input type="checkbox" name="project-domain" value="哲学" />哲学</label><label><input type="checkbox" name="project-domain" value="经济学" />经济学</label><label><input type="checkbox" name="project-domain" value="法学" />法学</label><label><input type="checkbox" name="project-domain" value="教育学" />教育学</label><label><input type="checkbox" name="project-domain" value="文学" />文学</label><label><input type="checkbox" name="project-domain" value="历史学" />历史学</label><label><input type="checkbox" name="project-domain" value="理学" />理学</label><label><input type="checkbox" name="project-domain" value="工学" />工学</label><label><input type="checkbox" name="project-domain" value="农学" />农学</label><label><input type="checkbox" name="project-domain" value="医学" />医学</label><label><input type="checkbox" name="project-domain" value="管理学" />管理学</label><label><input type="checkbox" name="project-domain" value="艺术学" />艺术学</label><label><input type="checkbox" name="project-domain" value="其他" />其他</label></div></fieldset><label>语言<select id="project-language"><option selected>中文</option><option>英文</option><option>中英双语</option></select></label><label>引用格式<select id="project-citation"><option selected>GB/T 7714</option><option>APA</option><option>MLA</option><option>Chicago</option></select></label></div><label>写作目标<textarea id="project-goal" placeholder="研究问题、方法、目标院校或期刊、预期成果等"></textarea></label><p class="project-field-help">学科领域用于选择科研工作流，可同时选择多个交叉方向；创建后仍可在项目设置中修改。</p><div class="modal-actions split-actions"><button class="danger-link" id="project-delete-button" value="cancel" type="button" hidden>删除项目</button><span></span><button value="cancel" type="submit" formnovalidate>取消</button><button class="primary-button" value="default" type="submit">保存项目</button></div></form></dialog>
+    <dialog id="project-dialog"><form method="dialog" class="modal-card" id="project-form"><div class="modal-heading"><div><p class="eyebrow">论文项目</p><h2 id="project-dialog-title">新建项目</h2></div><button value="cancel" type="submit" formnovalidate>×</button></div><label>项目名称<input id="project-title" required maxlength="80" /></label><div class="form-grid"><label>论文类型<select id="project-type"><option>课程论文</option><option>开题报告</option><option selected>硕士学位论文</option><option>博士学位论文</option><option>期刊论文</option><option>研究报告</option></select></label><fieldset class="domain-picker" id="project-domains"><legend>学科领域（可多选）</legend><div class="domain-options"><label><input type="checkbox" name="project-domain" value="哲学" />哲学</label><label><input type="checkbox" name="project-domain" value="经济学" />经济学</label><label><input type="checkbox" name="project-domain" value="法学" />法学</label><label><input type="checkbox" name="project-domain" value="教育学" />教育学</label><label><input type="checkbox" name="project-domain" value="文学" />文学</label><label><input type="checkbox" name="project-domain" value="历史学" />历史学</label><label><input type="checkbox" name="project-domain" value="理学" />理学</label><label><input type="checkbox" name="project-domain" value="工学" />工学</label><label><input type="checkbox" name="project-domain" value="农学" />农学</label><label><input type="checkbox" name="project-domain" value="医学" />医学</label><label><input type="checkbox" name="project-domain" value="管理学" />管理学</label><label><input type="checkbox" name="project-domain" value="艺术学" />艺术学</label><label><input type="checkbox" name="project-domain" value="其他" />其他</label></div></fieldset></div><label>写作目标<textarea id="project-goal" placeholder="研究问题、方法、目标院校或期刊、预期成果等"></textarea></label><p class="project-field-help">学科领域用于选择科研工作流，可同时选择多个交叉方向；创建后仍可在项目设置中修改。</p><div class="modal-actions split-actions"><button class="danger-link" id="project-delete-button" value="cancel" type="button" hidden>删除项目</button><span></span><button value="cancel" type="submit" formnovalidate>取消</button><button class="primary-button" value="default" type="submit">保存项目</button></div></form></dialog>
     <dialog id="reminder-dialog"><form method="dialog" class="modal-card reminder-card"><div class="reminder-icon">学</div><h2>开始生成前，请先确认</h2><p>AI工具仅作学习帮手，请同学勤奋努力，掌握真知识。</p><small>生成结果仍需你核验事实、引用与格式。</small><div class="modal-actions"><button value="cancel" type="submit" formnovalidate>返回检查</button><button class="primary-button" value="confirm" type="submit">我已知晓，开始生成</button></div></form></dialog>
     <dialog id="confirm-dialog"><form method="dialog" class="modal-card compact-modal"><h2 id="confirm-title">确认操作</h2><p id="confirm-message"></p><div class="modal-actions"><button value="cancel" type="submit" formnovalidate>取消</button><button class="danger-button" value="confirm" type="submit">确认删除</button></div></form></dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -213,6 +230,10 @@
     <script src="./text-diff.js"></script>
     <script src="./writing-workbench.js"></script>
     <script src="./project-experience.js"></script>
+    <script src="./research-project.js"></script>
     <script src="./reading-tools.js"></script>
+    <script src="./settings-experience.js"></script>
+    <script src="./workspace-experience.js"></script>
+    <script src="./turn-experience.js"></script>
   </body>
 </html>

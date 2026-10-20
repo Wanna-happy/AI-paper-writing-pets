@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { normalizeAgents } = require('./agent-api-config');
+const { DEFAULT_PERMISSIONS, normalizePermissions } = require('./permission-policy');
+const { DEFAULT_FORMATTING, normalizeFormatting } = require('./document-formatting');
 
 const DEFAULT_SETTINGS = {
   pet: 'ember-pup',
@@ -14,6 +16,8 @@ const DEFAULT_SETTINGS = {
   outputLanguageMode: 'follow-request-chinese-default',
   defaultCitation: 'GB/T 7714',
   writingStyle: 'rigorous',
+  permissions: { ...DEFAULT_PERMISSIONS },
+  documentFormatting:{...DEFAULT_FORMATTING},
   alwaysOnTop: false,
   petPosition: null,
   soundEnabled: true,
@@ -58,13 +62,16 @@ function loadSettings() {
   try {
     const raw = fs.readFileSync(getSettingsPath(), 'utf8');
     const stored = JSON.parse(raw);
+    const permissions=normalizePermissions(stored.permissions,stored.dataEnvironment);
     const legacyPetMap = { shiba: 'ember-pup', cat: 'shadow-kit', panda: 'nori', bunny: 'nori', penguin: 'nori' };
     return {
       ...DEFAULT_SETTINGS,
       ...stored,
       pet: legacyPetMap[stored.pet] || stored.pet || DEFAULT_SETTINGS.pet,
       api: normalizeApiSettings(stored.api),
-      dataEnvironment: { ...DEFAULT_SETTINGS.dataEnvironment, ...(stored.dataEnvironment ?? {}), networkEnabled: stored.dataEnvironment?.networkEnabled === true },
+      permissions,
+      documentFormatting:normalizeFormatting(stored.documentFormatting),
+      dataEnvironment: { ...DEFAULT_SETTINGS.dataEnvironment, ...(stored.dataEnvironment ?? {}), networkEnabled: permissions.sandboxNetwork },
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -76,6 +83,9 @@ function saveSettings(partial) {
   const next = { ...current, ...partial };
   next.api = normalizeApiSettings(next.api);
   next.dataEnvironment = { ...current.dataEnvironment, ...(partial.dataEnvironment || {}), networkEnabled: (partial.dataEnvironment?.networkEnabled ?? current.dataEnvironment.networkEnabled) === true };
+  next.permissions=normalizePermissions({...current.permissions,...(partial.permissions||{}),...(partial.dataEnvironment?.networkEnabled!==undefined?{sandboxNetwork:partial.dataEnvironment.networkEnabled}: {})},next.dataEnvironment);
+  next.dataEnvironment.networkEnabled=next.permissions.sandboxNetwork;
+  next.documentFormatting=normalizeFormatting({...current.documentFormatting,...(partial.documentFormatting||{})});
   fs.mkdirSync(path.dirname(getSettingsPath()), { recursive: true });
   fs.writeFileSync(getSettingsPath(), JSON.stringify(next, null, 2), 'utf8');
   return next;

@@ -209,7 +209,7 @@ function createProject(input = {}) {
     language: input.language || '中文',
     citationStyle: input.citationStyle || 'GB/T 7714',
     goal: input.goal || '',
-    thesisProfile: normalizeThesisProfile(input.thesisProfile),
+    thesisProfile: normalizeThesisProfile({...input.thesisProfile,targetWords:input.thesisProfile?.targetWords||require('./thesis-controller').defaultTargetWords(input.type)}),
     archived: false,
     createdAt: now,
     updatedAt: now,
@@ -241,7 +241,7 @@ function updateProject(projectId, partial) {
     }
   }
   Object.assign(project, normalized, { updatedAt: new Date().toISOString() });
-  if ('thesisProfile' in normalized && project.type === '硕士学位论文') project.thesisControl = ensureThesisControl(project);
+  if ('thesisProfile' in normalized) project.thesisControl = ensureThesisControl(project);
   saveWorkspace(state);
   return project;
 }
@@ -453,16 +453,19 @@ function saveDraft(projectId, draft) {
   const conversationId = draft.conversationId || project.activeConversationId;
   if (!project.conversations.some(item => item.id === conversationId)) throw new Error('对话不属于当前项目');
   const previous = project.drafts.find(item => item.id === draft.id);
+  if(draft.mode==='api'&&!draft.thesisUnit)draft={...draft,thesisUnit:require('./thesis-controller').createThesisUnit(project,draft.workflow||{},draft.task||draft.title||'',{conversationId})};
   const saved = require('./draft-history').versionDraft(previous, { id: draft.id || crypto.randomUUID(), createdAt: draft.createdAt || now, ...draft, conversationId }, now);
   const existingIndex = project.drafts.findIndex((item) => item.id === saved.id);
   if (existingIndex >= 0) project.drafts[existingIndex] = saved;
   else project.drafts.unshift(saved);
+  require('./turn-changes').record(project, previous, saved);
   const conversation = project.conversations.find((item) => item.id === conversationId);
   if (conversation) {
     conversation.updatedAt = now;
     if (conversation.title === '新对话') conversation.title = conversationTitle(draft.task || draft.title);
   }
   project.updatedAt = now;
+  if(saved.thesisUnit)project.thesisControl=require('./thesis-controller').updateThesisProgress(project,saved);
   saveWorkspace(state);
   if (['api', 'local-draft'].includes(saved.mode)) saveConversationTurn(projectId, conversationId, { id: `draft:${saved.id}`, role: 'assistant', text: saved.content, notes: saved.checks || [], status: saved.mode === 'local-draft' ? 'local-draft' : saved.deliveryStatus || 'ready', createdAt: saved.createdAt });
   return saved;
@@ -472,6 +475,15 @@ function assertConversation(projectId, conversationId) {
   const project = loadWorkspace().projects.find(item => item.id === projectId);
   if (!project?.conversations.some(item => item.id === conversationId)) throw new Error('对话不属于当前项目');
   return project;
+}
+
+function assignDraftChapter(projectId,draftId,chapterId) {
+  const project=loadWorkspace().projects.find(p=>p.id===projectId),draft=project?.drafts.find(d=>d.id===draftId);
+  if(!draft||draft.mode!=='api')throw new Error('稿件不属于当前项目或不是正式正文');
+  const chapters=ensureThesisControl(project).chapters,chapter=chapters.find(c=>c.id===chapterId);
+  if(!chapter)throw new Error('请选择当前项目目录中的章节');
+  const sequence=draft.thesisUnit?.chapterId===chapterId?draft.thesisUnit.sequence:Math.max(0,...project.drafts.filter(d=>d.thesisUnit?.chapterId===chapterId).map(d=>d.thesisUnit.sequence||0))+1;
+  return saveDraft(projectId,{...draft,changeOrigin:'manual',workflow:{...draft.workflow,chapterId},thesisUnit:{...draft.thesisUnit,id:draft.thesisUnit?.id||`unit-${draft.id}`,chapterId,chapterTitle:chapter.title,sequence}});
 }
 
 function saveConversationTurn(projectId, conversationId, turn) {
@@ -574,6 +586,7 @@ function saveToolRun(run) {
 }
 
 module.exports = {
+  assignDraftChapter,
   closeWorkspace,
   createConversation,
   createProject,

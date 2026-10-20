@@ -12,7 +12,6 @@ const {
   buildThesisContext,
   createThesisUnit,
   isLongThesis,
-  updateThesisProgress,
 } = require('../thesis-controller');
 const { evaluateRun } = require('../quality/evaluator');
 const { reviewDelivery } = require('../quality/delivery-review');
@@ -251,7 +250,8 @@ class AgentOrchestrator {
       const pendingClarification = project.clarifications?.[conversationId];
       let clarificationContext = pendingClarification?.status === 'pending' ? `# 当前待回答的问题确认卡\n${JSON.stringify({ questions: pendingClarification.questions, selectedAnswers: pendingClarification.draftAnswers || [] })}\n卡片已显示给用户。用户未回答前不要再次提出同一批问题或重复提交；若本轮用户明确回答了这些问题，结合答案继续处理。` : '';
       const supersededContext = supersededClarification ? '# 本轮意图更新\n用户的新指令覆盖了旧问题确认卡，该卡已撤回，不得继续要求用户回答或沿用其中的“依赖不可用/改换方法”前提。核查当前依赖与数据，按本轮明确指定的方法推进；真实执行分析仍遵守当前方案确认流程。' : '';
-      let projectContext = [projectSettingsContext(project), decisionContext(project, conversationId), `本轮可用附件：${request.attachments.slice(0, 30).map(file => file.name).join('、') || '无'}`, clip(memory.context, 8000), clip(empiricalContext, 6000), clarificationContext, supersededContext, clip(dataManifest, 3000)].filter(Boolean).join('\n\n');
+      let projectContext = [projectSettingsContext(project, settings), decisionContext(project, conversationId), `本轮可用附件：${request.attachments.slice(0, 30).map(file => file.name).join('、') || '无'}`, clip(memory.context, 8000), clip(empiricalContext, 6000), clarificationContext, supersededContext, clip(dataManifest, 3000)].filter(Boolean).join('\n\n');
+      projectContext += '\n' + require('../research-design').designContext(project, task);
       projectContext += '\n' + require('./continuation-context').continuationContext({ task, runs: this.workspaceStore.listAgentRuns?.(projectId, 30) || [], projectId, conversationId, currentRunId: run.id, empiricalPlan, preparation: project.dataPreparations?.[conversationId] });
       const existingProgress = require('./pipeline-policy').reusableState(empiricalPlan, { projectId, conversationId, attachments: request.attachments, resolveAttachment: this.toolRegistry.resolveAttachment });
       projectContext += `\n宿主实际核验的进度（只能复用这里有效的方案和结果）：${JSON.stringify({ reusableAnalysis: existingProgress.reusableAnalysis, results: existingProgress.results.map(result => ({ stepId: result.stepId, methodId: result.methodId, summary: result.summary })) })}`;
@@ -354,13 +354,13 @@ class AgentOrchestrator {
 
       const allSkillIds = [...new Set((plan.tasks || []).flatMap((t) => t.skills || []))];
       const usingEmpiricalResults = Boolean(plan.empiricalPlanId && empiricalPlan?.status === 'writing-approved');
-      const outputLanguage = requestedLanguage([task, request.note, usingEmpiricalResults ? empiricalPlan.writingProposal.task : ''].filter(Boolean).join('\n'), project.language);
+      const outputLanguage = requestedLanguage([task, request.note, usingEmpiricalResults ? empiricalPlan.writingProposal.task : ''].filter(Boolean).join('\n'), settings.defaultLanguage || '中文');
       const lengthTask = usingEmpiricalResults ? empiricalPlan.writingProposal.lengthRequirement : parseLengthRequirement(request.note, outputLanguage) ? request.note : task;
       const lengthGuidance = buildLengthGuidance({ ...project, language: outputLanguage }, lengthTask);
       const lengthContract = parseLengthRequirement(lengthTask, outputLanguage);
       const lengthUnit = lengthContract?.metric === 'words' ? '英文词' : '汉字';
       run.lengthContract = lengthContract;
-      const researchWorkflow = buildResearchWorkflow(project, task, allSkillIds);
+      const researchWorkflow = buildResearchWorkflow({ ...project, activeConversationId: conversationId }, task, allSkillIds);
       const skill = { skill: allSkillIds, label: 'pi-harness' };
 
       stateMachine.move('GENERATING');
@@ -377,7 +377,20 @@ class AgentOrchestrator {
           emitProgress({ stage: 'milestone', label: `当前文件读取未成功：${error.message}` });
         }
       }
+      const deniedOperations=new Set();
       const harnessContext = {
+        settings,
+        authorizeTool: async (toolName,params={}) => {
+          const policy=require('../permission-policy'),operation=policy.OPERATIONS[toolName];if(!operation)return;
+          if(deniedOperations.has(operation))throw new Error('本轮用户已拒绝该操作，不得重复请求或绕过。');
+          policy.assertAllowed(this.loadSettings(),operation);
+          if(!policy.needsApproval(this.loadSettings(),operation))return;
+          if(!this.waitForInteraction)throw new Error('当前权限要求执行前确认，请在工作台重新发起任务。');
+          const reference={id:require('crypto').randomUUID(),operation,toolName,label:policy.LABELS[operation],detail:String(params.name||params.dataFile||params.query||params.request||'当前项目已授权任务').slice(0,240)};
+          const response=await waitForCard('permission',reference);
+          if(response.action!=='approve'){deniedOperations.add(operation);const error=new Error(`用户拒绝${reference.label}，本次操作未执行。`);error.code='PERMISSION_DENIED';throw error;}
+          policy.assertAllowed(this.loadSettings(),operation);
+        },
         taskContract: plan.contract || intent?.taskContract,
         reusableAnalysisResults: plan.reusableAnalysis ? existingProgress.completedResults : [],
         validateWritingResults: results => {
@@ -391,6 +404,11 @@ class AgentOrchestrator {
         empiricalContext: plan.branch === 'writing' && !usingEmpiricalResults ? '' : empiricalContext,
         empiricalResults: usingEmpiricalResults ? (empiricalPlan.results || []).filter(result => empiricalPlan.writingProposal.resultStepIds?.includes(result.stepId)) : plan.branch === 'pipeline' && (intent?.usesAnalysisResults || plan.contract.usesExistingResults) ? existingProgress.results : [],
         planningTools: {
+          submitThesisOutline: async input => {
+            const result=await require('../outline-conversation').discussOutline({input,store:this.workspaceStore,projectId,conversationId,confirm:harnessContext.planningTools.submitClarification});
+            Object.assign(project,this.workspaceStore.loadWorkspace().projects.find(p=>p.id===projectId));
+            return result;
+          },
           submitClarification: async input => {
             let questions = (Array.isArray(input?.questions) ? input.questions : []).slice(0, 12).map((item, index) => ({
               id: String(item.id || `q${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || `q${index + 1}`,
@@ -409,7 +427,7 @@ class AgentOrchestrator {
             const prior = latest?.clarifications?.[conversationId];
             const signature = JSON.stringify(questions.map(({ question, options }) => [question, options]));
             if (!this.waitForInteraction && prior?.status === 'pending' && prior.signature === signature) return { id: prior.id, status: 'pending', instruction: '沿用已有问题卡；不要在回复中重复问题。' };
-            if (empiricalPlan?.status === 'pending-confirmation') {
+            if (input.purpose!=='outline' && empiricalPlan?.status === 'pending-confirmation') {
               empiricalPlan = { ...empiricalPlan, status: 'superseded', supersededAt: new Date().toISOString(), supersededBy: run.id };
               empirical.savePlan(this.workspaceStore, projectId, conversationId, empiricalPlan);
               emitProgress({ stage: 'empirical-plan', analysisPlan: empiricalPlan });
@@ -455,7 +473,10 @@ class AgentOrchestrator {
             const files = [...(request.attachments || []), ...(empiricalPlan && !(request.attachments || []).some(file => file.name === empiricalPlan.attachment.name) ? [empiricalPlan.attachment] : [])];
             const attachment = selectDataAttachment(require('../project-files').selectCurrentDataFiles(files), input.dataFile);
             const dataSelection = input.dataSelection || project.dataPreparations?.[conversationId]?.preparedData?.selection || (empiricalPlan?.attachment?.id === attachment.id ? empiricalPlan.dataSelection : {}) || {};
-            if (intent?.needsDataPreparation && (!project.dataPreparations?.[conversationId] || JSON.stringify(project.dataPreparations[conversationId].preparedData.selection) !== JSON.stringify(require('../tools/data-profile').normalizeDataSelection(dataSelection)) || project.dataPreparations[conversationId].preparedData.sourceFingerprint !== empirical.fingerprint(this.toolRegistry.resolveAttachment(attachment)))) await harnessContext.planningTools.prepareData({ dataFile: attachment.id, selection: dataSelection });
+            if (intent?.needsDataPreparation && (!project.dataPreparations?.[conversationId] || JSON.stringify(project.dataPreparations[conversationId].preparedData.selection) !== JSON.stringify(require('../tools/data-profile').normalizeDataSelection(dataSelection)) || project.dataPreparations[conversationId].preparedData.sourceFingerprint !== empirical.fingerprint(this.toolRegistry.resolveAttachment(attachment)))) {
+              await harnessContext.authorizeTool('prepare_data_file', { dataFile: attachment.id });
+              await harnessContext.planningTools.prepareData({ dataFile: attachment.id, selection: dataSelection });
+            }
             const profile = await inspectSelectedData(attachment, dataSelection);
             if (!profile.rows) throw new Error('所选数据范围没有记录，不能提交分析方案');
             const proposed = empirical.normalizeProposal({ ...input, dataSelection, dataFile: attachment.id, originalTask: task }, { projectId, conversationId, attachments: files, resolveAttachment: this.toolRegistry.resolveAttachment, previous: empiricalPlan });
@@ -558,7 +579,7 @@ class AgentOrchestrator {
         readConversationHistory: conversationId && this.workspaceStore.listConversationTurns ? () => this.workspaceStore.listConversationTurns(projectId, conversationId) : null,
         originalTask: task,
         lengthContract,
-        writingContext: [memory.context || buildProjectMemory(project, 9000, request.conversationId), isLongThesis(project) ? buildThesisContext(project) : '', isLongThesis(project) ? buildAssemblyContext(project) : '', conversationContext, clarificationContext, preflightDataContext].filter(Boolean).join('\n\n'),
+        writingContext: [memory.context || buildProjectMemory(project, 9000, request.conversationId), isLongThesis(project) ? buildThesisContext(project) : '', buildAssemblyContext(project), require('../research-design').designContext(project,task), conversationContext, clarificationContext, preflightDataContext].filter(Boolean).join('\n\n'),
         writerContext: lengthGuidance,
         recordToolResult,
         priorEvidence: harnessToolResults.filter(r => r.toolName === 'retrieve_context').flatMap(r => r.result?.hits || []),
@@ -566,7 +587,7 @@ class AgentOrchestrator {
         resumeNote: resumeCheckpoint ? String(request.note || '').trim() : '',
         // 毕业论文 HTML 输出契约：从旧版生成 Agent 找回（标题层级/段落规范/篇幅执行/引用规则），
         // 缺了它 writer 会输出提纲式标题与空段落。
-        rolePromptSuffix: { chat: decisionContext(project, conversationId) + '\n回复先给本轮结果与下一步，通常不超过三条简短要点。核验过程已在执行记录中，勿复述打开文件/原始行数/等待确认等流水账。有卡片只引导操作，不全文重抄。可执行的筛选、数值转换和缺失标记处理由 data-prep 完成，不要求用户人工清洗或重新上传。统计结论必须注明同一筛选口径。', writer: createPaperWritingAgentPrompt({ language: outputLanguage }) },
+        rolePromptSuffix: { chat: decisionContext(project, conversationId) + '\n回复先给本轮结果与下一步，通常不超过三条简短要点。核验过程已在执行记录中，勿复述打开文件/原始行数/等待确认等流水账。有卡片只引导操作，不全文重抄。可执行的筛选、数值转换和缺失标记处理由 data-prep 完成，不要求用户人工清洗或重新上传。统计结论必须注明同一筛选口径。', writer: createPaperWritingAgentPrompt({ language: outputLanguage })+'\n'+require('./context-policy').writingPreferencesContext(settings) },
       };
       const executionOptions = {
         layer,
@@ -832,7 +853,7 @@ class AgentOrchestrator {
       stateMachine.move('SAVING');
       emitProgress({ stage: 'saving' });
       const draft = this.workspaceStore.saveDraft(projectId, {
-        runId: run.id, durationMs: Date.now() - startedMs, interactionTimeline,
+        runId: run.id, changeOrigin:'agent', durationMs: Date.now() - startedMs, interactionTimeline,
         title: usingEmpiricalResults ? empiricalPlan.writingProposal.title : task.slice(0, 28) || '论文写作结果', task, ...(request.userAction === 'resume' ? { userAction: 'resume' } : {}), content: processed, conversationId: request.conversationId,
         attachments: contextFiles.map(({ id, name, extension, size, previewDataUrl, scope }) => ({ id, name, extension, size, previewDataUrl, scope })),
         toolResult, citations: [...new Set(retrieval.hits.map((hit) => hit.documentName))],
@@ -841,15 +862,14 @@ class AgentOrchestrator {
         checks, mode: 'api', skill: skill.skill, chatReply: harnessResult.chatText || null, lengthReview: run.lengthReview || null,
         progress: TaskProgress.update(run.progress, { stage: 'run-done', needsRevision: deliveryReview.status !== 'ready', label: deliveryReview.status === 'needs-review' ? '正文已保存，来源与引用需要复核' : undefined }),
         deliveryStatus: deliveryReview.status, deliveryReview, outputLanguage,
-        workflow: { id: researchWorkflow.id, sectionId: researchWorkflow.sectionId, section: researchWorkflow.sectionLabel, writingMode: researchWorkflow.writingModeLabel, architecture: researchWorkflow.architecture, steps: researchWorkflow.steps, retrievalLenses: queries.map((q) => q) },
-        thesisUnit: isLongThesis(project) ? createThesisUnit(project, researchWorkflow, task) : null,
+        workflow: { id: researchWorkflow.id, chapterId:researchWorkflow.chapterId, sectionId: researchWorkflow.sectionId, section: researchWorkflow.sectionLabel, writingMode: researchWorkflow.writingModeLabel, architecture: researchWorkflow.architecture, steps: researchWorkflow.steps, retrievalLenses: queries.map((q) => q) },
+        thesisUnit: createThesisUnit(project, researchWorkflow, task, {conversationId}),
         retrieval: { mode: retrieval.mode, model: retrieval.model, totalChunks: retrieval.totalChunks, hitCount: retrieval.hits.length, queryCount: queries.length },
       });
       if ((empiricalPlan?.status === 'writing-approved' && plan.empiricalPlanId) || (plan.branch === 'pipeline' && plan.contract.requestsReport && empiricalPlan?.results?.length)) {
         empiricalPlan = { ...empiricalPlan, status: 'completed', draftId: draft.id };
         empirical.savePlan(this.workspaceStore, projectId, conversationId, empiricalPlan);
       }
-      if (isLongThesis(project)) this.workspaceStore.updateProject(projectId, { thesisControl: updateThesisProgress({ ...project, drafts: [...(project.drafts || []), draft] }, draft) });
       emitProgress({ stage: 'run-done', needsRevision: deliveryReview.status !== 'ready', label: deliveryReview.status === 'needs-review' ? '正文已保存，来源与引用需要复核' : undefined });
       stateMachine.move('COMPLETED');
       run.completedAt = new Date().toISOString();

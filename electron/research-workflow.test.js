@@ -29,7 +29,7 @@ const workflow = buildResearchWorkflow(
   ['academic-writing-core', 'literature-review'],
 );
 assert.strictEqual(workflow.sectionId, 'literature-review');
-assert.strictEqual(workflow.writingModeId, 'management-case');
+assert.strictEqual(workflow.writingModeId, 'management-general');
 assert(workflow.queries.length >= 3);
 const external = require('./skills/research-adapter');
 assert.strictEqual(sectionFromSkillIds([external.CORE_SKILL_ID, external.LEGACY_IDS['literature-review']]).id, 'literature-review');

@@ -5,13 +5,18 @@ function clip(value, limit) {
   const room = Math.max(0, limit - notice.length), head = Math.floor(room * .7);
   return text.slice(0, head) + notice + text.slice(-Math.max(0, room - head));
 }
-function projectSettingsContext(project = {}) {
+function projectSettingsContext(project = {}, settings = {}) {
   return '# 当前项目设置（默认约束；用户本轮明确要求优先）\n' + JSON.stringify({
     title: clip(project.title, 200), type: clip(project.type, 100),
     domains: (project.domains || [project.domain]).filter(Boolean).slice(0, 20),
-    language: project.language || '中文', citationStyle: project.citationStyle || 'GB/T 7714', goal: clip(project.goal, 2000),
+    language: settings.defaultLanguage || '中文', citationStyle: settings.defaultCitation || 'GB/T 7714', goal: clip(project.goal, 2000),
+    researchType: require('../research-design').researchDesign(project), methodology: clip(project.thesisProfile?.methodology,1000),
+    researchQuestion:clip(project.thesisProfile?.researchQuestion,1000),
+    outlineConfirmed:project.thesisProfile?.outlineConfirmed===true,
+    outline:project.thesisProfile?.outlineConfirmed?(project.thesisProfile.outline||[]).map(c=>({id:c.id,title:c.title,sectionIds:c.sectionIds,targetWords:c.targetWords})):[],
   });
 }
+function writingPreferencesContext(settings={}) {return `写作风格偏好：${{rigorous:'严谨学术，论证清晰，术语规范',concise:'简洁清晰，避免重复，优先准确表达',explanatory:'解释充分，补充必要背景与推理衔接'}[settings.writingStyle]||'严谨学术'}。本轮用户明确要求和项目要求优先，不因风格偏好改变事实、数字或引用。`;}
 function selectContextFiles(files, { branch = '', task = '', explicitIds = [] } = {}) {
   if (['conversation', 'environment', 'clarification'].includes(branch)) return [];
   const explicit = new Set(explicitIds), query = String(task).toLowerCase();
@@ -42,4 +47,4 @@ function boundTranscript(context, model = {}) {
   if (estimate > window - Math.min(4096, Math.floor(window / 4))) throw new Error('本轮上下文超过模型安全预算，已停止发送。请缩小任务范围或选择更大上下文的模型。');
   return bounded;
 }
-module.exports = { clip, projectSettingsContext, selectContextFiles, inputBudget, boundTranscript };
+module.exports = { clip, projectSettingsContext, writingPreferencesContext, selectContextFiles, inputBudget, boundTranscript };

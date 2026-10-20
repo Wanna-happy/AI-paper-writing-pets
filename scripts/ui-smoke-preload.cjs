@@ -14,6 +14,13 @@ const interactionResponses = [];
 const resumeRequests = [];
 let resumeError = '';
 contextBridge.exposeInMainWorld('petAPI', {
+  getResearchBlueprint:input=>process.argv.includes('--management-flow-ipc')?ipcRenderer.invoke('research-test-blueprint',input):Promise.resolve({chapters:[],preflight:{researchType:{label:'待明确研究类型'},blockers:[]}}),
+  extractProjectOutline:(projectId,documentId)=>ipcRenderer.invoke('research-test-outline',projectId,documentId),
+  assignDraftChapter:(projectId,draftId,chapterId)=>ipcRenderer.invoke('research-test-assign',projectId,draftId,chapterId),
+  getAssembledDraft:projectId=>ipcRenderer.invoke('research-test-assemble',projectId),
+  exportAssembledThesis:projectId=>ipcRenderer.invoke('research-test-export',projectId),
+  reviewTurnChanges:(projectId,conversationId,runId)=>process.argv.includes('--turn-experience-ipc')?ipcRenderer.invoke('turn-changes-review',projectId,conversationId,runId):Promise.resolve({entries:[]}),
+  undoTurnChanges:(projectId,conversationId,runId)=>ipcRenderer.invoke('turn-changes-undo',projectId,conversationId,runId),
   previewFileBytes: payload=>ipcRenderer.invoke('file-bytes-preview',payload),
   searchFileBytes: payload=>ipcRenderer.invoke('file-bytes-search',payload),
   getResumeRequests: async () => resumeRequests,
@@ -25,11 +32,13 @@ contextBridge.exposeInMainWorld('petAPI', {
   getInteractionResponses: async () => interactionResponses,
   getPreparationPreview: async () => ({ name: '清洗后的分析数据.csv', text: 'x,y\n1,2\n' }),
   exportPreparation: async () => ({ canceled: true }),
-  loadWorkspace: async () => workspace, getSettings: async () => settings,
+  loadWorkspace: async () => process.argv.includes('--management-flow-ipc')?ipcRenderer.invoke('research-test-workspace'):process.argv.includes('--turn-experience-ipc')?ipcRenderer.invoke('turn-test-workspace'):workspace, getSettings: async () => settings,
+  saveSettings:async partial=>{Object.assign(settings,partial);return settings;},
+  importFormattingRequirements:async()=>({canceled:false,name:'学校排版要求.txt',documentFormatting:{bodyFont:'楷体',bodySize:12,lineMode:'exact',lineValue:28,marginTop:2.5},defaultCitation:'APA',recognizedFields:['bodyFont','bodySize','lineMode','lineValue','marginTop'],warnings:['请核对解析结果。']}),
   addTestProject: async project=>{workspace.projects.push(project);return workspace;},
   setActiveProject: async id=>{if(!workspace.projects.some(p=>p.id===id))throw new Error('项目不存在');workspace.activeProjectId=id;return workspace;},
   setActiveConversation: async (projectId,id)=>{const project=workspace.projects.find(p=>p.id===projectId);if(!project?.conversations.some(c=>c.id===id))throw new Error('对话不存在');project.activeConversationId=id;return workspace;},
-  updateProject: async (projectId, patch) => { const project = workspace.projects.find(item => item.id === projectId); if (!project) throw new Error('project not found'); Object.assign(project, patch); return project; },
+  updateProject: async (projectId, patch) => { if(process.argv.includes('--management-flow-ipc'))return ipcRenderer.invoke('research-test-update',projectId,patch);const project = workspace.projects.find(item => item.id === projectId); if (!project) throw new Error('project not found'); Object.assign(project, patch); return project; },
   updatePlanDocument: async (projectId, conversationId, reference, patch) => {
     const plan = { id: reference.id, revision: reference.revision + 1, status: 'pending-confirmation', ...patch, attachment: { name: 'data.csv' }, documentChanges: [{ name: '研究问题', before: '原问题', after: patch.researchQuestion }] };
     workspace.projects[0].empiricalPlans = { [conversationId]: plan };

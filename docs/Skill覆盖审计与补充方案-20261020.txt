@@ -1,0 +1,210 @@
+AI论文宠物：用户流程与研究 Skill 覆盖审计、补充方案
+检查日期：2026-10-20
+
+一、结论与检查边界
+
+当前产品主要不是 Skill 数量不足，而是“内容库很大，产品适配层较薄”。需要优先解决中文任务匹配、学科适配、分析执行契约和结果验收，再按用户需求补方法。继续整包导入，并不能直接补齐这些问题。
+
+本次检查了运行时实际加载的库、Skill 匹配与注入、角色工具、正文流程、分析方法登记和部分现有测试；生成了完整清单和24个中文请求的静态路由探针。没有调用付费模型、执行真实研究分析、运行全量回归，也没有修改产品运行代码。因此“已登记可执行”不等于该方法已经通过真实数据的正确性验收；“未匹配专用 Skill”也不等于模型绝对做不了。
+
+审计资料：docs/skill-audit-20261020/
+- skills.csv：全部 Skill 的 ID、目录、启用状态、分层、来源、许可元数据、关联方法和文件长度。
+- methods.csv：36类方法、登记状态、关联 Skill。
+- routing-probes.csv / routing-probes.json：24个典型中文请求的默认 Skill 与候选前8名。
+- metrics.json：本次统计口径和数量。
+
+二、当前到底有哪些能力
+
+1. 实际启用的是 assets/research-skills；electron/skills/skill-runtime.js 转发至 external-runtime.js。
+2. 库中共有1107个 Skill 条目、77个集合；1081个启用，26个被禁用。
+3. 全库分层：core 22、extended 888、duplicate 84、out-of-domain 113。启用条目中仍有83个 duplicate、113个 out-of-domain；当前检索没有按这两类标签排除它们。分层标签是已有目录元数据，不是本次重新判定。
+4. 26个禁用项：25个标记为非商业许可来源；1个 Significance-Search 因按显著性筛选设定的问题被禁用。现有禁止显著性导向选模的边界应保留。
+5. 方法索引共36类，其中29类 available、7类 requires-extension。36类关联 Skill 都能找到且已启用，说明“存在对应文本”和“执行已接通”是两种状态。
+6. 实际角色含 collector、preparer、coordinator、chat、analyst、writer。运行引擎会追加 Skill 搜索/阅读工具；不能只看静态角色声明就判断 analyst 或 writer 不能读 Skill。
+
+主要默认入口（这里列核心产品入口，不是全部1107项）：
+- 通用学术写作：04-K-Dense-AI-claude-scientific-writer::scientific-writing。
+- 任务规划：69-Paper-WorkFlow::paper-workflow。
+- Python实证分析：00.1-Full-empirical-analysis-skill_Python::Full-empirical-analysis-skill。
+- 结果一致性：50-brycewang-aer-skills::aer-consistency。
+- 实证正文：67-econfin-workflow-toolkit::paper-writer。
+- 文献综述：36-taoyunudt-literature-review-skill::literature-review。
+- 引言：50-brycewang-aer-skills::aer-introduction。
+- 开题：67-econfin-workflow-toolkit::Econfin-Proposal。
+- 理论/假设：04-K-Dense-AI-claude-scientific-writer::hypothesis-generation。
+- 研究设计：50-brycewang-aer-skills::aer-identification。
+- 润色：67-econfin-workflow-toolkit::readability。
+- 引用核验：67-econfin-workflow-toolkit::reference-verify。
+- 投稿：67-econfin-workflow-toolkit::paper-submission。
+- 系统综述：52-keemanxp-slr-prisma::slr-prisma。
+- 主题分析：53-keemanxp-thematic-analysis-skill::thematic-analysis。
+
+三、按真实用户流程检查：已有、缺口、补在哪里
+
+01 创建项目、设置学科/语言/引用/排版
+已有：项目设置、写作模式、格式设置和Word导出代码。
+缺口类型：产品配置与 Skill 的约束同步、学科选择验收，不是缺一个设置 Skill。
+补充：统一生成“本项目研究约束”，供规划、写作和导出读取；检查用户本轮要求与默认设置冲突时的优先级。不要让上游Skill的APA/AER格式覆盖项目GB/T格式。
+位置：electron/agent/context-policy.js、electron/research-workflow.js、electron/document-formatting.js、electron/word-export.js。
+
+02 上传论文、资料、数据与格式要求
+已有：文件导入、资料检索、数据检查、只读预览，分别由产品工具实现。
+缺口类型：资料理解与可追溯交接需要强化；不是“上传 Skill”不足。
+补充：文件类型/解析完整性/可读取范围报告；资料角色标注（文献、原始数据、格式要求、已有正文）；扫描件或不可解析文件不得默认为已完整阅读。正文证据保留来源页码/段落定位；多数据文件先明确合并规则。
+位置：electron/project-files.js、electron/pi/agent-tools.mjs、资料解析及RAG工具；再配一个“资料理解与证据台账”产品指导模块。
+
+03 问题澄清、选题、开题
+已有：clarification工具、任务规划、Econfin-Proposal。
+缺口类型：已有但跨学科适配不足。Econfin-Proposal原文明确面向金融经济实证与12模块计划书，不宜作为所有学科的默认开题模板。
+补充：先识别研究问题、学科、论文类型和可用材料，按需要澄清；人文、案例、问卷、计量等走不同研究设计。避免把单个问题扩展成整篇计划。
+位置：research-adapter.js、external-runtime.js与规划提示；新增轻量“研究问题与方案设计”产品适配模块，复用库内专门方法。
+
+04 文献发现、阅读与引用核验
+已有：文献综述、reference-verify、citation-management等内容；collector可以联网搜索/采集，writer可以读资料。
+缺口类型：匹配与工具连接不足。默认网页搜索基于通用搜索页面；本次在electron运行代码中未发现Crossref/OpenAlex等专用学术元数据接入。writer分支本身没有网页搜索工具，不能因Skill要求research-lookup就假设能联网核验。
+实测：“核验参考文献DOI与文中引用”没有触发reference-verify默认路由，collector默认列表为空；同义词/词序比较脆弱。
+补充：文献发现→元数据核验→全文证据→引用位置四步交接，分清“元数据存在”和“原文支持论断”。为DOI、作者年份、题名匹配增加专用工具；无权限或无全文时清楚标记未核验。
+位置：external-runtime.js中文路由、collector采集工具、结构化文献记录与writer证据输入。
+
+05 正文章节写作
+已有：research-workflow.js覆盖综述、引言、理论、方法、结果、讨论、结论、摘要和整篇等章节契约；还包含多个学科写作模式。这些已有能力应保留，不能说产品完全没有章节流程。
+缺口类型：章节契约与默认Skill不一致。
+实测：教育学“撰写绪论”默认带入aer-introduction；原Skill要求AER风格、无Introduction标题、摘要100词上限。教育学“根据已有正文写摘要和关键词”匹配Econfin-Proposal；“将中文摘要翻译成英文”也会匹配该开题Skill。讨论、结论、研究背景主要回落通用scientific-writing。
+补充：建立中文学位论文的章节适配：研究背景与问题、综述、理论、方法、结果、讨论、结论、摘要/翻译。每个模块定义所需材料、允许输出、禁止新增事实、章节间关系及检查点；按章节+学科选择，避免固定八章强制串行。
+优先原则：先修摘要/绪论/研究设计的错配，再补讨论、结论与全篇逻辑检查。不是给每个同义词再下载一份Skill。
+位置：research-workflow.js、research-adapter.js、external-runtime.js与writer输入契约。
+
+06 数据检查、清洗与变量构造
+已有：inspect/prepare工具、data-prep方法、原始数据保留、准备后副本及确认的数据筛选规则。
+缺口类型：专门指导和核查案例不足。默认常落到112878字符的全流程实证Skill，容易过宽；不能据此断言已支持所有插补、量表计分或合并策略。
+补充：独立“数据审计与准备”指导：数据字典、单位、样本流失、缺失机制、异常值、反向题、类型转换、派生变量、合并键；变更前后行数和规则须可追溯，重要处理先确认，不静默删样本。
+位置：data-profile/data-preparation及code-analysis工具、方法输入契约；复用当前确定性data-prep路径。
+
+07 统计、计量、预测与可解释分析
+已有：29类方法的登记与确认后执行入口，见下一节。
+缺口类型：方法粒度、依赖与正确性验收。19类登记方法共用同一个通用Python实证Skill；除专门data-prep外，主要通过模型生成Python再执行，而不是每种方法一个已验证的固定实现。
+补充：将常用方法做成较短、可单独读取的方法卡：输入前提、最小代码参考、依赖、必要诊断、结构化结果、适用边界、失败说明。把“模型生成并运行成功”和“研究方法有效”分开检查。
+位置：assets/research-runtime/methods.json、empirical-workflow.js、code-analysis.js及方法指导层。
+
+08 从真实结果写实证正文
+已有：PAPER_PET_RESULT结构、methodId/stepId校验、结果读取工具、writer读取已生成结果、paper-writer/aer-consistency；并非没有结果交接保护。
+缺口类型：逐项证据绑定与方法专属验收仍需补强。
+补充：样本量/估计值/置信区间/表图绑定到具体结果ID；区分描述、预测、关联与因果。结果→表图→正文互查，失败步骤不得写成已完成；阶段总结只引用实际产物。
+位置：parseResult、makeAnalysisResultTools、writer输入和正文一致性检查。
+
+09 修改、扩写、翻译与全篇统一
+已有：local-edit的polish、expand、empirical操作及数字/引用保护，全文修改预览和接受/取消交互。
+缺口类型：专门编辑契约及评价不足，不代表通用Agent不能缩写或翻译。
+补充：缩写、学术翻译、结构重组、术语一致性、跨章节重复与论证连贯检查；明确保持事实和引用，不将“降重”作为造新结论或逃避引用的目标。接受前展示整个文章中的修改位置。
+位置：electron/agent/local-edit.js、正文编辑与审查流程；复用readability和通用写作知识。
+
+10 导出、交付、失败恢复
+已有：Word导出/排版设置、成果归属、权限、断点与恢复、执行过程展示；属于产品工程能力，不能靠新增Skill替代。
+缺口类型：交付验收与任务状态连接。
+补充：以任务要求检查章节、字数、引用、表图、输出文件与排版；生成简明交付清单，保留真实未完成事项。恢复时依据确认方案、数据指纹和已完成结果跳过有效步骤，环境变化则重新校验。
+位置：workspace-store、orchestrator、交付契约、word-export与既有结果/恢复链路。
+
+四、数据分析覆盖的准确边界
+
+登记为available的29类：
+数据准备；OLS；WLS/GLS；二元Logit/Probit；多分类/有序模型；计数GLM；分位数回归；混合效应；面板FE；面板RE；一阶差分；IV-2SLS；IV-GMM；简单DID；ITS；合成控制；PSM/IPW；局部RDD；描述统计；相关分析；组间检验；信度/EFA；时间序列；预测；轨迹聚类；生存分析；诊断；稳健性；异质性。
+
+登记为requires-extension、当前确认执行会阻断的7类：
+现代错位DID、动态面板GMM、SEM/CFA、Tobit/Heckman、空间计量、因果机器学习DML/causal forest、复杂抽样加权。
+
+特别说明：问卷题项设计与复杂抽样加权不是同一个功能；EFA可登记执行也不等于SEM/CFA已接通。
+
+DTW-KMeans、LightGBM、TreeSHAP、LOWESS已有别名约束，分别归入trajectory-clustering、prediction或descriptive；不是完全没有入口。但别名只保证保留方法要求，不等于具有各自完整的已验收模板。
+应优先补：DTW距离与聚类实现的一致性；按国家/时间分组的验证与数据泄漏检查；TreeSHAP的背景样本/输出语义；LOWESS参数与候选阈值不确定性；将阈值形态与因果解释分开。沿用用户确认的设定，不为得到显著性反复改模型。
+
+五、已在库中、应优先复用而不是再导入的内容
+
+- 定性：53集合thematic-analysis；43集合qualitative-research-guide、grounded-theory-guide。主题分析已有显式路由，案例/扎根理论没有对应默认专门路由。实测“开展案例研究与扎根理论编码”回落通用Python实证Skill。
+- 问卷：43集合questionnaire-design-guide、assessment-design-guide、sem-guide，以及25集合相关研究设计模块。不能因为54集合survey-design被禁用，就说整个库没有问卷设计。
+- Meta分析：43集合meta-analysis-guide、25集合universal-ma-codebook等。52集合slr-prisma原文明确不覆盖统计合并；系统综述写作不等于Meta执行。实测“Meta分析，合并效应量与异质性检验”因“异质性”匹配到AER稳健性Skill。
+- 机器学习：17集合scikit-learn等内容可作参考；需要按实际Python工具适配。不要把上游MCP/浏览器/其他运行环境的说明当作本产品已具备的工具。
+- 引用：reference-verify、citation-management等已有；先补中文触发与真实核验工具。
+- 摘要/学术写作：27集合econ-abstract-writing、academic-writing等已有内容可评估复用，但经济学摘要仍不应直接充当全学科模板。
+
+定性工作流还需要逐段证据定位、匿名化、编码本、研究者解释与人工复核；Meta需要筛选台账、效应量、偏倚评价和统计合并执行。只有写作指导文本，不能宣称这些完整研究工作流已经实现。
+
+六、横向缺口及优先级
+
+P0-1：修Skill选择，而不是先扩库。
+当前匹配基于词项/中文二元片段与正则路由；通用规划和通用分析均获得40分优先加权，即使请求只写结论也会出现在候选前列。学科只提供较小加分；默认Skill最多4个，命中多条时按路由顺序截取。
+方案：按角色、当前阶段、学科、方法和真实工具能力先缩小范围，再做语义/同义表达匹配；通用Skill作为兜底而非所有任务的强优先项。去重应支持显式选定的主版本：当前默认scientific-writing本身标记duplicate，不能简单全部删除duplicate而误删产品入口。
+验收：同义改写仍选择正确阶段；摘要不进开题、定性不默认计量；复合任务拆分后各自选Skill。不得固定全论文流水线。
+
+P0-2：补正文产品适配层。
+重点为学位论文摘要、绪论、研究设计、讨论与结论。已有章节结构继续使用，新增的是输入证据、学科差异、禁止行为和验收要求。
+验收：仅给已有正文时摘要不能新增结果；教育/人文绪论不被AER标题和100词限制覆盖；用户只改一段不生成全章。
+
+P0-3：补“已登记可执行”与“验证通过”的能力状态。
+目前available不是统计正确性证明。增加依赖可用、输入适用、执行成功、诊断通过/有限制、产物完整等状态，不向用户暴露一个笼统“支持”。7个扩展方法保持诚实边界。
+验收：选取小型已知答案/公开可复核数据，验证常用方法的系数/分组/行数及诊断；只做方法定向用例，不用全量UI回归代替统计验证。
+
+P0-4：控制内容注入与引用读取。
+通用Python Skill长112878字符；composePrompt按预算平均取每个Skill开头，后部方法可能未进入上下文。实际run-engine使用动态inputBudget.skills，未必有默认28000字符。分页工具存在，但目前是否主动读到所需方法依赖模型。
+方案：方法卡/章节卡短正文＋明确引用路径；根据任务定位相关章节，记录实际读取版本与片段。没有读后半部分，不代表后半部分不存在。
+验收：长Skill中的尾部方法能被定向读取，不因预算只看到前面的经济学全流程。
+
+P1-1：学术证据链与引用核验工具。
+复用已有引用Skill，补元数据查询、原文证据、未核验标识、文内与文后引用对应。
+P1-2：数据准备、预测解释与结果写作专用指导。
+优先覆盖当前用户实际使用的DTW/LightGBM/SHAP/LOWESS和分组验证。
+P1-3：问卷、案例/访谈、系统综述分支。
+先把已存在的内容接到正确任务和工具，补研究台账与人工复核入口；Meta统计合并单列扩展，不混入PRISMA写作。
+P1-4：正文修改与交付检查。
+术语/章节一致性、翻译、压缩、格式导出，全部服从项目与用户要求。
+
+P2：扩展高级方法。
+根据真实用户需求再接SEM/CFA、现代错位DID、复杂抽样等7类，以及Meta、文本量化、空间方法等。每项独立完成依赖、方法卡、结果契约和已知答案用例后再对用户宣称支持。
+
+七、推荐的补充方式与目录
+
+不建议直接编辑所有上游SKILL.md，也不建议把新文件放进assets目录就认为自动接入。当前外部模式读取的是catalog登记条目，不是任意递归发现所有新文件。
+
+建议分成三层：
+A. 上游知识库：保留来源与版本，作为可搜索参考；重复、跨域、受限项经过显式策展。
+B. 产品适配层：新建独立的产品模块目录，例如assets/product-research-skills/（建议，尚未创建），保存中文章节卡、方法卡、证据与交付契约；运行时显式加载并和上游ID关联。
+C. 可执行工具层：仍由electron工具与方法索引管理文件、联网、代码运行、结果存储、权限与恢复，不交给Skill自行假设能力。
+
+建议每张产品卡至少包含：
+ID/版本；用户触发与不适用场景；学科/阶段/角色；必要输入；需要澄清的条件；真实允许工具与依赖；主要步骤；结构化产物；必须做的检查；禁止行为；失败/恢复；上游来源；定向验收案例。
+
+首批建议交付模块（均为待实施方案）：
+1. 中文论文分章节写作适配包（按需加载，含摘要与翻译）。
+2. 研究问题与跨学科方案设计适配包。
+3. 文献证据与引用核验适配包。
+4. 数据审计、清洗与变量构造方法包。
+5. 预测、分组验证、DTW与解释方法包。
+6. 结构化结果→表图→正文一致性包。
+7. 问卷/定性/系统综述研究记录包。
+8. 正文修改、全篇检查与导出交付包。
+
+八、外部补充来源：先补权威方法与接口，不再整包堆Skill
+
+- Crossref REST API：适合文献DOI与元数据核验；元数据命中不能证明论断得到全文支持。
+  https://www.crossref.org/documentation/retrieve-metadata/rest-api/
+- OpenAlex Works：适合文献发现、书目信息与关联文献入口；实际接入需按当前API规则处理访问与限额。
+  https://help.openalex.org/data/works/
+- PRISMA官方清单与流程图：用于系统综述报告完整性与记录项；不能替代实际检索、筛选、偏倚评价或统计合并。
+  https://www.prisma-statement.org/prisma-2020
+
+以上官方页面已在本次检查中核对。没有安装新依赖、购买服务或接入外部账户。
+
+九、质量与来源治理
+
+现有目录中只有21个条目带非空eval_coverage标记；这是上游目录元数据，不是本产品通过21个或全部研究任务测试。现有skill-runtime.test.js覆盖目录/阻断/4个检索样例/分页等；pi/research-skills.test.mjs使用模拟模型验证搜索阅读链路。它们有价值，但不能证明论文质量与每一种统计方法正确。
+
+建议按用户流程建立小型定向基准：中文同义任务、不同学科章节、缺资料拒绝补造、已知答案分析、非显著结果保留、引用不可核验、数据泄漏、方法不可执行、失败恢复、原文件只读。每次只跑改动涉及的用例，并保留实际Skill选择、读取片段、结果和失败原因。
+
+许可元数据有305项unknown、34项share-alike。这里仅指出来源状态尚需确认，不作法律结论；应核对文件级来源和分发条件，不把目录标记当作完成授权审查。
+
+十、实施顺序建议
+
+第一批：修中文/阶段/学科路由＋拆分正文适配＋能力状态与短卡读取。这一批直接改善“选错Skill、任务范围变大、以为能做但执行不了”。
+第二批：按现有真实研究任务补证据链、数据准备、预测解释、结果写作，以及定向正确性用例。
+第三批：按用户使用量补问卷/定性/综述闭环和高级方法，不先承诺所有学科所有方法。
+
+本轮产物为审计与方案。没有新增/启用Skill，没有修改分析执行策略或用户数据；实施需另行确定批次。
