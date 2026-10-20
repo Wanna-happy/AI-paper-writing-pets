@@ -74,7 +74,9 @@ async function main() {
   const enriched = require('../assets/research-skills/catalog/skills-enriched.json').skills.filter(s => entries.some(e => e.path === s.path));
   fs.writeFileSync(path.join(library, 'catalog/skills.json'), JSON.stringify({ skills: entries })); fs.writeFileSync(path.join(library, 'catalog/skills-enriched.json'), JSON.stringify({ skills: enriched }));
   const core = entries.find(s => s.qualified_name === CORE_SKILL_ID); fs.mkdirSync(path.dirname(path.join(library, core.path)), { recursive: true }); fs.copyFileSync(runtime.skills.get(CORE_SKILL_ID).filePath, path.join(library, core.path));
-  assert.equal(new SkillRuntime(library).getCatalog().length, 1);
+  const packagedCatalog = new SkillRuntime(library).getCatalog();
+  assert.deepEqual(packagedCatalog.filter(item=>!item.id.startsWith('paper-pet::')).map(item=>item.id), [CORE_SKILL_ID]);
+  assert.deepEqual(packagedCatalog.filter(item=>item.id.startsWith('paper-pet::')).map(item=>item.id).sort(), require('./skills/product-guidance').cards.map(item=>item.id).sort());
   const csv = path.join(root, 'synthetic.csv'); fs.writeFileSync(csv, 'x,y\n1,2\n');
   const flow = require('./empirical-workflow'), file = { id: 'f', name: 'synthetic.csv', extension: '.csv' }, scope = { projectId: 'p', conversationId: 'c', resolveAttachment: () => csv };
   const proposal = flow.normalizeProposal({ researchQuestion: 'synthetic', dataDescription: 'synthetic', dataFile: 'f', steps: Array.from({ length: 18 }, () => ({ methodId: 'ols', purpose: 'synthetic', specification: 'y ~ x' })) }, { ...scope, attachments: [file] });

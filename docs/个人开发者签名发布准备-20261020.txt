@@ -1,0 +1,45 @@
+个人开发者代码签名准备（2026-10-20）
+
+当前状态
+- 用户以个人身份申请，尚无证书。
+- 本机 CurrentUser/My 与 LocalMachine/My 中未发现代码签名证书。
+- 已补充 Windows 证书库指纹选证、证书有效期/私钥关联预检。兼容通过硬件令牌或厂商客户端注册到 Windows 证书库的代码签名证书，不导出私钥。
+- 尚未进行真实签名、签名时间戳验证、付费下单或实名申请。不可将当前包描述为已签名。
+
+申请前确认
+候选：SSL.com IV Code Signing（个人代码签名）。官网明确个人身份产品，无需企业登记，要求身份验证；私钥保存在合规硬件或云HSM中。
+官网：https://www.ssl.com/products/software-integrity/code-signing/iv/
+个人申请并不自动代表所有地区都受理。付款前先向官方确认本人所在地区、证件种类是否可完成验证，失败是否可退款。
+完整费用须包括证书、硬件/云签名订阅、签名次数、运费和税费；本产品含多个原生组件，云套餐按文件或次数收费时应先核算，不能只看证书年费。
+证书使用经验证的个人姓名作为发布者；应用名称仍可为“AI论文宠物”。仅有.cer公钥文件无法签名。
+勿购买普通HTTPS证书、文档电子签名产品，勿使用身份不属于自己的共享代签。自签证书不等于Windows公众信任。
+
+发给服务商的询问（由申请人本人发送）
+我以个人身份发布 Windows Electron 桌面软件，目前没有企业登记。请确认：
+1. 是否受理我所在地区的个人代码签名，支持哪些证件和验证方式？
+2. 是否支持商业软件分发？个人发布者名称如何显示？
+3. 硬件或云签名是否兼容 Windows SignTool/electron-builder 26.x？是否提供Windows证书库/KSP客户端，还是仅支持专用CLI/API？
+4. 证书、密钥存储、签名次数、税费和运费的完整首年/续费费用是多少？
+5. 不通过身份验证时如何退款？
+未经用户明确授权，本代理没有向任何服务商发送这段信息或个人资料。
+
+证书签发后的本机操作
+1. 从厂商官方渠道安装硬件驱动或签名客户端；由本人登录、连接令牌/手机授权。
+2. 在仓库根目录运行：
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-code-signing.ps1
+3. 复制要使用的40位证书指纹（不是私钥），运行：
+   npm run release:signed -- -CertificateThumbprint 实际40位指纹
+   此命令将执行依赖审计、测试、打包、签名验证、Defender扫描与SHA256生成；不能用SkipTests替代首次发布验收。
+4. PIN、密码和手机确认由本人在本机完成，不发送到聊天，不写入Git。
+5. 若厂商只有专用云API/CLI，没有Windows证书库客户端，需要按其官方接入方式补充签名钩子；不能将云API凭据填入WIN_CSC_LINK冒充证书文件。
+6. release-report.json和签名检查通过后，在干净Windows环境从实际下载链接下载安装，核对发布者、签名时间戳、启动、分析、升级和数据保留。Valid签名不保证SmartScreen没有信誉提示。
+
+测试记录
+- PowerShell脚本语法检查通过。
+- 无证书诊断、无效指纹拒绝、缺失证书拒绝通过。
+- 未进行真实硬件/云客户端签名，因此有效证书的完整发布路径尚待证书签发后验收。
+
+参考
+electron-builder 26.x文档：https://www.electron.build/v26/docs/features/code-signing/code-signing-win/
+微软SmartScreen说明：https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation
+本地检查依据：node_modules/app-builder-lib/out/options/winOptions.d.ts 与 windowsSignToolManager.js。

@@ -1,0 +1,58 @@
+name: 使用问题反馈
+description: 报告安装、文件预览、对话、分析或导出问题
+title: "[问题] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请勿提交 API Key、证件、论文原文、本机数据库或含敏感信息的日志。
+        截图请先遮盖个人信息；数据问题优先使用可公开的最小样例。
+  - type: input
+    id: version
+    attributes:
+      label: 产品版本
+      placeholder: 例如 0.1.4，未签名测试版
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本与系统架构
+      placeholder: 例如 Windows 11 24H2，x64
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题发生位置
+      options:
+        - 下载或安装
+        - 启动或设置
+        - 项目与资料导入
+        - 文件预览
+        - 对话与写作
+        - 数据处理与分析
+        - 编辑或导出
+        - 备份或恢复
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 描述操作顺序、预期效果和实际结果。
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: 错误提示或脱敏截图
+      description: 安装拦截请提供完整提示文字，不要关闭安全软件。
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私检查
+      options:
+        - label: 我已移除密钥、个人信息及未获授权公开的资料。
+          required: true

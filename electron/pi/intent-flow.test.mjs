@@ -14,7 +14,7 @@ const faux = fauxProvider({ tokensPerSecond: 100000 });
 const models = createModels(); models.setProvider(faux.provider);
 const layer = { models, getModel: () => faux.getModel() };
 const intent = (branch, extra = {}) => ({ branch, needsClarification: false, questions: [], usesAnalysisResults: false, clarificationResolution: 'pending', ...extra });
-function fixture(projectPatch = {}, key = 'synthetic') {
+function fixture(projectPatch = {}, key = 'synthetic', preferences = {}) {
   const project = { id: 'p', title: '教师工作体验', goal: '研究教师支持', domains: ['教育学'], type: '课程论文', documents: [], drafts: [], conversations: [{ id: 'c' }], activeConversationId: 'c', ...projectPatch };
   const saved = [], runs = [], calls = [], drafts = [];
   const engine = new AgentOrchestrator({
@@ -23,7 +23,7 @@ function fixture(projectPatch = {}, key = 'synthetic') {
       listConversationTurns: () => [{ id: 'prior', role: 'user', text: '只研究教师体验，中文写作，不做因果推断。' }],
       getConversationMemory: () => null, saveConversationMemory: () => {}, saveConversationTurn: (_, __, m) => saved.push(m),
       saveDraft: (_, d) => { drafts.push(d); return { ...d, id: 'draft' }; } },
-    loadSettings: () => ({ api: { provider: 'deepseek', model: 'synthetic' } }),
+    loadSettings: () => ({ ...preferences, api: { provider: 'deepseek', model: 'synthetic' } }),
     loadHarness: async () => ({ registryMod: { buildRegistry }, modelLayer: { createModelLayer: () => layer, requestModel },
       planner: { recognizeIntent: async args => { calls.push('intent'); return recognizeIntent(args); },
         planTasks: async args => { calls.push('plan'); assert(args.intent); return planTasks(args); } },
@@ -74,9 +74,9 @@ function fixture(projectPatch = {}, key = 'synthetic') {
   assert.equal(f.drafts.length, 1); assert.equal(f.runs.at(-1).branch, 'writing');
   assert.notEqual(f.drafts[0].title, '旧的结果章节'); assert.equal(f.runs.at(-1).lengthContract, null);
 }
-// A plain-language answer closes the pending card before planning.
+// Global preferences supply language/citation; legacy project fields do not override them.
 {
-  const f = fixture({ title: 'PROJECT_TITLE_SENTINEL', goal: 'PROJECT_GOAL_SENTINEL', language: '英文', citationStyle: 'APA' });
+  const f = fixture({ title: 'PROJECT_TITLE_SENTINEL', goal: 'PROJECT_GOAL_SENTINEL', language: '中文', citationStyle: 'GB/T 7714' }, 'synthetic', { defaultLanguage: '英文', defaultCitation: 'APA' });
   faux.setResponses([response(JSON.stringify(intent('writing'))), response(JSON.stringify({ tasks: [{ id: 'w', role: 'writer', task: '写引言', skills: [], dependsOn: [] }] })), ctx => {
     const text = JSON.stringify(ctx); for (const value of ['PROJECT_TITLE_SENTINEL', 'PROJECT_GOAL_SENTINEL', 'APA', '英文']) assert(text.includes(value));
     return response('<p>This is a synthetic introduction.</p>');

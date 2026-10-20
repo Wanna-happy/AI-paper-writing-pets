@@ -16,6 +16,8 @@
 
 签名版本需提前配置自己合法持有的可信签名证书：`WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD`（或 electron-builder 支持的 `CSC_LINK` / `CSC_KEY_PASSWORD`）。不要在源码、配置文件或日志中写入证书密码。脚本不自动上传 GitHub。
 
+硬件令牌或厂商签名客户端将证书注册到 Windows 证书库时，可先运行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-code-signing.ps1` 检查，再执行 `npm run release:signed -- -CertificateThumbprint 实际40位证书指纹`。该方式通过证书库调用私钥，不导出私钥；可能要求本人输入PIN或手机授权。预检只检查证书时间与私钥关联，不代表公开信任或实际签名已成功；最终仍须检查签名与发布报告。仅提供专用API/CLI的云签名服务尚需接入对应签名钩子，不能冒充证书文件。个人申请步骤和待办见[个人开发者签名发布准备](docs/个人开发者签名发布准备-20261020.txt)。
+
 发布流程包含实时依赖审计、回归测试、系统沙箱构建、安装包内容和密钥检查、签名验证、Defender 扫描和 SHA-256 校验。正式运行不要使用 `-SkipTests`；该开关仅用于同一源码和依赖已经测试通过后的本地重复构建。
 
 仅在 `release-report.json` 生成且扫描通过后，把安装包、SHA256SUMS.txt、依赖和打包检查报告发布为 GitHub Release 附件。不要上传 win-unpacked 整个目录。未签名包只能按预览版描述；不能要求用户关闭 Defender 或 SmartScreen。

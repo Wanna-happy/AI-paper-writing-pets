@@ -1,8 +1,8 @@
 {
   "name": "ai-paper-pet",
   "productName": "AI论文宠物",
-  "version": "0.1.3",
-  "description": "AI 论文宠物 - 常驻桌面的论文写作陪伴工具",
+  "version": "0.1.4",
+  "description": "面向中文人文社科研究的桌面论文助手：项目资料、研究对话、受控数据分析、正文编辑与 Word 导出",
   "main": "electron/main.js",
   "scripts": {
     "start": "node electron/start.js",
