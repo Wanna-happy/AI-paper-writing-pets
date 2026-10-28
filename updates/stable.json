@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "channel": "stable",
   "published": true,
-  "version": "0.1.6",
-  "publishedAt": "2026-10-27T06:09:18Z",
-  "notes": "0.1.6 Windows x64 未签名预览版。支持多对话并发、会话切换、独立草稿、执行中补充要求和打断后引导；优化学习提示、API 配置及分析任务恢复，更新运行时安全补丁。点击下载进入 GitHub Release，选择 AI-paper-pet-PREVIEW-UNSIGNED-0.1.6.exe。升级前请备份重要项目资料。此包未签名，Windows 可能显示未知发布者提示；不要关闭安全防护。相关定向检查、包内容检查和 Defender 扫描通过；本次未重新执行全量回归，未完成安装级覆盖升级验收。",
-  "downloadUrl": "https://github.com/Wanna-happy/AI-paper-writing-pets/releases/tag/v0.1.6-preview.20261027",
+  "version": "1.0.0",
+  "publishedAt": "2026-10-28T06:57:15.612Z",
+  "notes": "AI论文宠物 1.0 已发布。优化长对话与会话切换、AI 配置双开关，修复数据关系、权限及异常恢复问题；客户端不包含管理员页面，积分规则未调整。请下载 AI-paper-pet-PREVIEW-UNSIGNED-1.0.0.exe。升级前请备份重要项目。本包未签名，Windows 可能提示未知发布者。定向检查、包内容检查、Defender 扫描及隔离旧版数据迁移通过；未执行安装向导级覆盖升级和全量回归。",
+  "downloadUrl": "https://github.com/Wanna-happy/AI-paper-writing-pets/releases/tag/v1.0.0",
   "downloads": {
-    "github": "https://github.com/Wanna-happy/AI-paper-writing-pets/releases/tag/v0.1.6-preview.20261027"
+    "github": "https://github.com/Wanna-happy/AI-paper-writing-pets/releases/tag/v1.0.0"
   },
-  "sha256": "a33d73bacf69def93e9f0dd9a38b76a39da6ce974c530c07b534ca898fd23b78"
+  "sha256": "853afa582e88b05921bbb6f0bc3a5f9fd4bf14bd758c4ae6262d7c51cefbcec0"
 }
